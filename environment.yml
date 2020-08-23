@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - python=3.8
   - pip
   - matplotlib
   - numpy
@@ -15,10 +16,8 @@ dependencies:
   - ffmpeg
   - openh264
   - pandas
-  - collections
-  - itertools
-  - PIL
   - pip:
     - casadi
     - torch
     - torchvision
+    - gym
