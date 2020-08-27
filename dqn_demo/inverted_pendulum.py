@@ -137,3 +137,147 @@ EPS_START = 0.9         # 임의의 action 선택할 starting probability
 EPS_END = 0.05          # ``    ``      ``    end probability
 EPS_DECAY = 200         # 확률의 지수적 감소 속도 제어
 TARGET_UPDATE = 10
+
+# AI gym에서 반환된 형태를 기반으로 계층을 초기화 하도록 화면의 크기를
+# 가져옵니다. 이 시점에 일반적으로 3x40x90 에 가깝습니다.
+# 이 크기는 get_screen()에서 고정, 축소된 렌더 버퍼의 결과입니다.
+init_screen = get_screen()
+_, _, screen_height, screen_width = init_screen.shape
+
+# gym 행동 공간에서 행동의 숫자를 얻습니다.
+n_actions = env.action_space.n
+
+policy_net = DQN(screen_height, screen_width, n_actions).to(device)     # 정책망. n_action: output, 연산 주체 설정(G/Cpu)
+target_net = DQN(screen_height, screen_width, n_actions).to(device)     # 목표망. 같은 형식의 batch
+target_net.load_state_dict(policy_net.state_dict())                     # 정책망의 param & buffer 들 로드
+target_net.eval()                                                       # set module in evaluation mode
+
+optimizer = optim.RMSprop(policy_net.parameters())                      # optimizer 설정
+memory = ReplayMemory(10000)                                            # 리플레이백 메모리 설정
+
+steps_done = 0                                                          # iterator
+
+def select_action(state):
+    """Epsilon Greedy 정책에 따라 행동을 선택합니다."""     # 모델을 사용하여 행동을 선택하거나 또는 모델을 균일하게 샘플링.
+    global steps_done
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END)*math.exp(-1.0 * steps_done / EPS_DECAY)     # Eps decay 모델 설정
+    steps_done += 1
+    if sample > eps_threshold:                   # sample 이 eps 보다 클 경우 ()
+        with torch.no_grad():                   # gradient calc stop
+            # t.max (1)은 각 행의 가장 큰 열 값을 반환합니다.
+            # 최대 결과의 두번째 열은 최대 요소의 주소값이므로,
+            # 기대 보상이 더 큰 행동을 선택할 수 있습니다.
+            return policy_net(state).max(1)[1].view(1,1)                # 정책망 모델을 통한 행동
+    else:
+        return torch.tensor([[random.randrange(n_actions)]], device = device, dtype = torch.long)       # 균일한 샘플링
+
+episode_durations=[]
+
+def plot_durations():        # plotting duration of recent 100 episodes
+    plt.figure(2)
+    plt.clf()
+    durations_t = torch.tensor(episode_durations, dtype=torch.float)
+    plt.title('Training...')
+    plt.xlabel('Episode')
+    plt.ylabel('Duration')
+    plt.plot(durations_t.numpy())
+    # 100개의 에피소드 평균을 가져 와서 도표 그리기
+    if len(durations_t) >= 100:
+        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
+        means = torch.cat((torch.zeros(99), means))
+        plt.plot(means.numpy())
+
+    plt.pause(0.001)  # 도표가 업데이트되도록 잠시 멈춤
+    if is_ipython:
+        display.clear_output(wait=True)
+        display.display(plt.gcf())
+
+#%%
+"""Training Loop"""
+def optimize_model():
+    if len(memory) < BATCH_SIZE:
+        return
+    transitions = memory.sample(BATCH_SIZE)
+    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # detailed explanation). 이것은 batch-array의 Transitions을 Transition의 batch-arrays로
+    # 전환합니다.
+    batch = Transition(*zip(*transitions))
+
+    # 최종이 아닌 상태의 마스크를 계산하고 배치 요소를 연결합니다
+    # (최종 상태는 시뮬레이션이 종료 된 이후의 상태)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                          batch.next_state)), device=device, dtype=torch.bool)
+    non_final_next_states = torch.cat([s for s in batch.next_state
+                                                if s is not None])
+    state_batch = torch.cat(batch.state)            #상태 배치
+    action_batch = torch.cat(batch.action)          # 행동 배치
+    reward_batch = torch.cat(batch.reward)          # 보상 배치
+
+    # Q(s_t, a) 계산 - 모델이 Q(s_t)를 계산하고, 취한 행동의 열을 선택합니다.
+    # 이들은 policy_net에 따라 각 배치 상태에 대해 선택된 행동입니다.
+    state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+    # 모든 다음 상태를 위한 V(s_{t+1}) 계산
+    # non_final_next_states의 행동들에 대한 기대값은 "이전" target_net을 기반으로 계산됩니다.
+    # max(1)[0]으로 최고의 보상을 선택합니다.
+    # 이것은 마스크를 기반으로 병합되어 기대 상태 값을 갖거나 상태가 최종인 경우 0을 갖습니다.
+    next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
+    # 기대 Q 값 계산
+    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+    # Huber 손실 계산
+    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # 모델 최적화
+    optimizer.zero_grad()
+    loss.backward()                         # backward 미분을 통한 loss 계산
+    for param in policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
+    optimizer.step()
+
+#%%
+num_episodes = 50
+for i_episode in range(num_episodes):
+    # 환경과 상태 초기화
+    env.reset()
+    last_screen = get_screen()
+    current_screen = get_screen()
+    state = current_screen - last_screen
+    for t in count():
+        # 행동 선택과 수행
+        action = select_action(state)
+        _, reward, done, _ = env.step(action.item())
+        reward = torch.tensor([reward], device=device)
+
+        # 새로운 상태 관찰
+        last_screen = current_screen
+        current_screen = get_screen()
+        if not done:
+            next_state = current_screen - last_screen
+        else:
+            next_state = None
+
+        # 메모리에 변이 저장
+        memory.push(state, action, next_state, reward)
+
+        # 다음 상태로 이동
+        state = next_state
+
+        # 최적화 한단계 수행(목표 네트워크에서)
+        optimize_model()
+        if done:
+            episode_durations.append(t + 1)
+            plot_durations()
+            break
+    #목표 네트워크 업데이트, 모든 웨이트와 바이어스 복사
+    if i_episode % TARGET_UPDATE == 0:
+        target_net.load_state_dict(policy_net.state_dict())
+
+print('Complete')
+env.render()
+env.close()
+plt.ioff()
+plt.show()
+# %%
