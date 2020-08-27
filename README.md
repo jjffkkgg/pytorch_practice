@@ -1,8 +1,6 @@
 ## Pytorch practice repository
 This repository is available for use of pytorch with following libraries.
 
-DQN available for use.
-
 ## Local Installation
 
 * Install anaconda.
