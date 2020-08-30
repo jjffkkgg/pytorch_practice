@@ -15,6 +15,7 @@ dependencies:
   - ffmpeg
   - openh264
   - pandas
+  - JSAnimation
   - pip:
     - casadi
     - torch
