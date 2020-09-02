@@ -50,14 +50,14 @@ Transition = namedtuple(
 gym.envs.register(
     id='CartPole_prefer-v0',
     entry_point='gym.envs.classic_control:CartPoleEnv',
-    max_episode_steps=1000,      # CartPole-v0 uses 200
+    max_episode_steps=700,      # CartPole-v0 uses 200
     reward_threshold=-110.0,
 )
 
 # 상수 정의
 ENV = 'CartPole_prefer-v0'     # 태스크 이름
 GAMMA = 0.99            # 시간할인율
-MAX_STEPS = 500         # 1에피소드 당 최대 단계 수
+MAX_STEPS = 700         # 1에피소드 당 최대 단계 수 (Must be equal to max_episode_steps)
 NUM_EPISODES = 1000      # 최대 에피소드 수
 batch_size = 32
 capacity = 10000        # Memory capacity
@@ -67,8 +67,7 @@ capacity = 10000        # Memory capacity
 
 
 # 애니메이션을 만드는 함수
-# 참고 URL http://nbviewer.jupyter.org/github/patrickmineault
-# /xcorr-notebooks/blob/master/Render%20OpenAI%20gym%20as%20GIF.ipynb
+# 참고 URL http://nbviewer.jupyter.org/github/patrickmineault/xcorr-notebooks/blob/master/Render%20OpenAI%20gym%20as%20GIF.ipynb
 from JSAnimation.IPython_display import display_animation
 from matplotlib import animation
 from IPython.display import display
@@ -89,7 +88,8 @@ def display_frames_as_gif(frames):
     anim = animation.FuncAnimation(plt.gcf(), animate, frames=len(frames),
                                    interval=50)
 
-    anim.save('movie_cartpole_DQN.mp4')  # 애니메이션을 저장하는 부분
+    # anim.save('movie_cartpole_DQN.mp4')  # 애니메이션을 저장하는 부분
+    anim.save('cartpole_DQN.gif', writer='imagemagick', fps=60)
     display(display_animation(anim, default_mode='loop'))
     
 
@@ -306,15 +306,18 @@ class Environment:
                 if done:
                     print(f'{episode} Episode: Finished after {step + 1} steps：최근 10 에피소드의 평균 단계 수 = {episode_10_list.mean()}')
                     break
-
-            if complete_episodes >= 10:                         # (iteration > max_episode_steps) && (pole does not lean down) for 10 episodes
-                print('10 에피소드 연속 성공')
-                is_episode_final = True                        # save result and break
-            
+                
             if is_episode_final is True:
                 display_frames_as_gif(frames)                   # save result as gif
                 break
             
+            if complete_episodes >= 10:                         # (iteration > max_episode_steps) && (pole does not lean down) for 10 episodes
+                print('10 에피소드 연속 성공')
+                is_episode_final = True                        # save result and break
+        
+        if is_episode_final is False:
+            print('학습 실패')
+                        
 
 
 # In[16]:
