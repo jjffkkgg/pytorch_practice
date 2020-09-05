@@ -16,6 +16,8 @@ from torch import nn
 from torch import optim
 import torch.nn.functional as F
 import gym
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 # In[3]:
@@ -112,12 +114,22 @@ class Net(nn.Module):
         super(Net, self).__init__()  
         self.fc1 = nn.Linear(n_in, n_mid)  
         self.fc2 = nn.Linear(n_mid, n_mid)
-        self.fc3 = nn.Linear(n_mid, n_out)  
+        self.fc_adv = nn.Linear(n_mid, n_out)       # Advantage Net
+        self.fc_v = nn.Linear(n_mid, 1)             # Value Net
 
     def forward(self, x):  
         x1 = F.relu(self.fc1(x))  
         x2 = F.relu(self.fc2(x1))
-        out = self.fc3(x2)
+
+        adv = self.fc_adv(x2)                           # not goes through ReLU
+        val = self.fc_v(x2).expand(-1, adv.size(1))     # not goes through ReLU
+        # val은 adv와 덧셈을 하기 위해 expand 메서드로 크기를 [minibatch*1]에서 [minibatch*2]로 변환
+        # adv.size(1)은 2(출력할 행동의 가짓수)
+
+        out = adv + val - adv.mean(1, keepdim = True).expand(-1, adv.size(1))
+        # val+adv에서 adv의 평균을 뺀다
+        # adv.mean(1, keepdim=True) 으로 열방향(행동의 종류 방향) 평균을 구함 크기는 [minibatch*1]이 됨
+        # expand 메서드로 크기를 [minibatch*2]로 늘림
         return out
 
 
