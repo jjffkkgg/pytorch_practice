@@ -68,7 +68,7 @@ def display_frames_as_gif(frames):
                                    interval=50)
 
     # anim.save('movie_cartpole_DQN.mp4')  # 애니메이션을 저장하는 부분
-    anim.save('cartpole_DQN.gif', writer='ImageMagick', fps=60)
+    anim.save('cartpole_DDQN.gif', writer='ImageMagick', fps=60)
     display(display_animation(anim, default_mode='loop'))
     
 

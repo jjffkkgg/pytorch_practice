@@ -18,6 +18,7 @@ import torch.nn.functional as F
 import gym
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
+from bst import BinarySearchTree
 
 
 # In[3]:
@@ -40,7 +41,8 @@ GAMMA = 0.99            # 시간할인율
 MAX_STEPS = 700         # 1에피소드 당 최대 단계 수
 NUM_EPISODES = 2000      # 최대 에피소드 수
 BATCH_SIZE = 32
-capacity = 10000        # Memory capacity
+CAPACITY = 10000        # Memory CAPACITY
+TD_ERROR_EPSILON = 0.0001  # 오차에 더해줄 바이어스
 
 
 # In[4]:
@@ -70,7 +72,7 @@ def display_frames_as_gif(frames):
                                    interval=50)
 
     # anim.save('movie_cartpole_DQN.mp4')  # 애니메이션을 저장하는 부분
-    anim.save('cartpole_DuelingDDQN.gif', writer='ImageMagick', fps=60)
+    anim.save('cartpole_DuelingDDQN_PER.gif', writer='ImageMagick', fps=60)
     display(display_animation(anim, default_mode='loop'))
     
 
@@ -102,8 +104,63 @@ class ReplayMemory:
     def __len__(self) -> int:
         '''return saved Transitions'''
         return len(self.memory)
-        
 
+
+
+# In[TDerror]:
+class TDerrorMemory:
+    """ Memory Class which saves TD error"""
+    def __init__(self, capacity: int) -> None:
+        '''Constructor'''
+        self.capacity = capacity
+        self.memory = []
+        self.index = 0
+
+    def __len__(self):
+        '''Return current length'''
+        return len(self.memory)
+
+    def push(self, td_error: int) -> None:
+        '''Save of TD err'''
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+
+        self.memory[self.index] = td_error
+        index = (index + 1) % self.capacity
+
+    def get_prioritized_indexes(self, batch_size: int) -> list:
+        '''extract index from probability of TD err'''
+
+        # sum TD error
+        sum_abs_td_err = np.sum(np.absolute(self.memory))
+        sum_abs_td_err += TD_ERROR_EPSILON * len(self.memory)       # add small enough number(to avoid too small TD err)
+
+        # create random binary tree, return with sorted
+        rand_tree = BinarySearchTree()
+        for _ in batch_size:
+            rand_list_val = np.random.uniform(0, sum_abs_td_err, 1) # create random num
+            rand_tree.add(rand_list_val,rand_list_val)              # add randnum as tree node
+        rand_list = rand_tree.sorted()                              # return list as sorted (key, value) tuple list
+
+        # decide index from random tree
+        indexes = []
+        idx = 0
+        tmp_sum_abs_td_err = 0
+
+        for rand_num in rand_list:
+            while tmp_sum_abs_td_err < rand_num[1]:
+                tmp_sum_abs_td_err += (abs(self.memory(idx)) + TD_ERROR_EPSILON)
+                idx += 1
+
+            # TD_ERROR_EPSILON을 더한 영향으로 인덱스가 실제 갯수를 초과했을 경우를 위한 보정
+            if idx >= len(self.memory):
+                idx = len(self.memory) - 1
+            indexes.append(idx)
+
+        return indexes
+
+    def update_td_error(self, updated_td_errs: list):
+        self.memory = updated_td_errs
 
 # In[6]:
 
@@ -143,7 +200,8 @@ class TrainNet:
         self.num_states = num_states
         self.num_actions = num_actions
         
-        self.mem = ReplayMemory(capacity)                           # Initialize ReplayMem
+        self.mem = ReplayMemory(CAPACITY)                           # Initialize ReplayMem
+        self.td_err_mem = TDerrorMemory(CAPACITY)                   # Initialize TD error memory
 
         n_in, n_mid, n_out = num_states, 32, num_actions
         self.policy_net = Net(n_in, n_mid, n_out)                   # create policy(main) net
@@ -172,12 +230,17 @@ class TrainNet:
         self.update_policynet()
     
 
-    def make_minibatch(self) -> list:
+    def make_minibatch(self, episode: int) -> list:
     # -----------------------------------------
     #  미니배치 생성
     # -----------------------------------------
         # 1 메모리 객체에서 미니배치를 추출
-        trans_sample = self.mem.sample(BATCH_SIZE)
+        if episode < 30:
+            trans_sample = self.mem.sample(BATCH_SIZE)
+        else:
+            # Now, extract minibatch from TD err mem
+            indexes = self.td_err_mem.get_prioritized_indexes(BATCH_SIZE)
+            trans_sample = [self.mem.memory[n] for n in indexes]
 
         # 2 각 변수를 미니배치에 맞는 형태로 변형
         # trans_sample 은 각 단계 별로 (state, action, state_next, reward) 형태로 BATCH_SIZE 갯수만큼 저장됨
@@ -278,6 +341,38 @@ class TrainNet:
                 [[random.randrange(self.num_actions)]])                 # return 0 or 1 (LongTensor of size 1*1)
 
         return action
+
+    def update_td_err_memory(self):                             # Added from PER
+        '''update TD err'''
+
+        # 신경망을 추론 모드로 전환
+        self.policy_net.eval()
+        self.target_net.eval()
+
+        # 전체 transition으로 미니배치를 생성
+        
+        batch = Transition(*zip(*trans_sample))
+
+        # 신경망의 출력 Q(s_t, a_t)를 계산
+
+        # cartpole이 done 상태가 아니고, next_state가 존재하는지 확인하는 인덱스 마스크를 만듬
+
+        # 먼저 전체를 0으로 초기화, 크기는 기억한 transition 갯수만큼
+
+        # 다음 상태에서 Q값이 최대가 되는 행동 a_m을 Main Q-Network로 계산
+        # 마지막에 붙은 [1]로 행동에 해당하는 인덱스를 구함
+
+        # 다음 상태가 있는 것만을 걸러내고, size 32를 32*1로 변환
+
+        # 다음 상태가 있는 인덱스에 대해 행동 a_m의 Q값을 target Q-Network로 계산
+        # detach() 메서드로 값을 꺼내옴
+        # squeeze() 메서드로 size[minibatch*1]을 [minibatch]로 변환
+
+        # TD 오차를 계산
+
+        # Q는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
+
+        # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
 
 
 # In[8]:
