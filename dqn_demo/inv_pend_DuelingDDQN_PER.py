@@ -137,7 +137,7 @@ class TDerrorMemory:
 
         # create random binary tree, return with sorted
         rand_tree = BinarySearchTree()
-        for _ in batch_size:
+        for _ in range(batch_size):
             rand_list_val = np.random.uniform(0, sum_abs_td_err, 1) # create random num
             rand_tree.add(rand_list_val,rand_list_val)              # add randnum as tree node
         rand_list = rand_tree.sorted()                              # return list as sorted (key, value) tuple list
@@ -212,7 +212,7 @@ class TrainNet:
         # change weight coeffs of network with gradient descent of params
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr = 0.0001)
 
-    def replay(self) -> None:
+    def replay(self, episode: int) -> None:
         '''REPLAY OF MEMORY & TRAIN OF NETWORK'''
     # -----------------------------------------
     # 1. 저장된 transition 수 확인
@@ -221,7 +221,7 @@ class TrainNet:
         if len(self.mem) < BATCH_SIZE:
             return None
         # 2. 미니배치 생성
-        self.batch, self.state_batch, self.action_batch, self.reward_batch, self.non_final_next_state = self.make_minibatch()
+        self.batch, self.state_batch, self.action_batch, self.reward_batch, self.non_final_next_state = self.make_minibatch(episode)
 
         # 3. expected_Q 계산
         self.expected_Q = self.get_expected_Q()
@@ -287,7 +287,7 @@ class TrainNet:
 
         # 다음 상태에서 Q값이 최대가 되는 행동 action_max을 Main Q-Network로 계산
         # 마지막에 붙은 [1]로 행동에 해당하는 인덱스를 구함
-        action_max[non_final_mask] = self.policy_net(self.non_final_next_state).max(1)[1].detach()
+        action_max[non_final_mask] = self.policy_net(self.non_final_next_state).detach().max(1)[1]
 
         # 다음 상태가 있는 것만을 걸러내고, size 32를 32*1로 변환
         action_max_non_final_next_state = action_max[non_final_mask].view(-1, 1)
@@ -344,36 +344,50 @@ class TrainNet:
 
     def update_td_err_memory(self):                             # Added from PER
         '''update TD err'''
+        #----------------------------------------------------------------------------
+        # 기본적으로 make_minibatch 와 get_expected Q 를 합쳐놓은 비슷한 구조로 볼수 있다.
+        # TD 오차를 알려면 Q가 필요하고, Q를 알려면 결국 미니배치가 또 필요하기 때문.
+        # batch 와 몇몇 인덱스 마스크가 class var 로 갖고오지 않도록 주의해야함.
+        # 이곳에서 생성된 batch를 통해 index가 결정되므로, 사실상 이 미니배치에서
+        # 몇가지가 뽑혀 가는것으로 간주할수 있다.
+        #----------------------------------------------------------------------------
 
         # 신경망을 추론 모드로 전환
         self.policy_net.eval()
         self.target_net.eval()
 
         # 전체 transition으로 미니배치를 생성
-        
+        trans_sample = self.mem.memory                  # 특정 갯수 대신, 모든 메모리를 다 들고 와버림
         batch = Transition(*zip(*trans_sample))
 
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+        non_final_next_state = torch.cat([s for s in batch.next_state if s is not None])
+
         # 신경망의 출력 Q(s_t, a_t)를 계산
-
+        Q = self.policy_net(state_batch).gather(1, action_batch)
         # cartpole이 done 상태가 아니고, next_state가 존재하는지 확인하는 인덱스 마스크를 만듬
-
+        non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
         # 먼저 전체를 0으로 초기화, 크기는 기억한 transition 갯수만큼
+        next_Q = torch.zeros(len(self.mem))
+        action_max = torch.zeros(len(self.mem)).type(torch.LongTensor)
 
         # 다음 상태에서 Q값이 최대가 되는 행동 a_m을 Main Q-Network로 계산
         # 마지막에 붙은 [1]로 행동에 해당하는 인덱스를 구함
-
+        action_max[non_final_mask] = self.policy_net(non_final_next_state).detach().max(1)[1]
         # 다음 상태가 있는 것만을 걸러내고, size 32를 32*1로 변환
-
+        action_max_non_final_next_state = action_max[non_final_mask].view(-1, 1)
         # 다음 상태가 있는 인덱스에 대해 행동 a_m의 Q값을 target Q-Network로 계산
         # detach() 메서드로 값을 꺼내옴
         # squeeze() 메서드로 size[minibatch*1]을 [minibatch]로 변환
-
-        # TD 오차를 계산
-
+        next_Q[non_final_mask] = self.target_net(non_final_next_state).gather(1, action_max_non_final_next_state).detach().squeeze()
+        # --TD 오차를 계산--
+        td_errs = (reward_batch + GAMMA * next_Q) - Q.squeeze()
         # Q는 size[minibatch*1]이므로 squeeze() 메서드로 size[minibatch]로 변환
 
         # TD 오차 메모리를 업데이트. Tensor를 detach() 메서드로 꺼내와서 NumPy 변수로 변환하고 다시 파이썬 리스트로 변환
-
+        self.td_err_mem.memory = td_errs.detach().numpy().tolist()
 
 # In[8]:
 
@@ -432,12 +446,15 @@ class Environment:
                     new_state = torch.unsqueeze(new_state, 0)           # size 4 -> size 1*4 convert
 
                 self.train.mem.push(
-                    state, action, new_state, reward)               # store iteration information(Transition) into memory
-                self.train.replay()                               # update Q with Experience Replay
-                state = new_state                                   # update state
+                    state, action, new_state, reward)             # store iteration information(Transition) into memory
+                self.train.td_err_mem.update_td_error([0])          # Save err, but save 0 here(arbitary) and update below
+                self.train.replay(episode)                        # update Q with Experience Replay
+                state = new_state                                 # update state
 
                 if done:
                     print(f'{episode} Episode: Finished after {step + 1} steps：최근 10 에피소드의 평균 단계 수 = {episode_10_list.mean()}')
+
+                    self.train.update_td_err_memory()                       # update TD err on TD err memory
                 
                     if (episode % 2 == 0):                                  # Every 2 episode, after done of step, update the target net to policy net
                         self.train.update_targetnet()
@@ -457,7 +474,6 @@ class Environment:
 
 # In[9]:
 
-
-cartpole_env = Environment()
-cartpole_env.run()
-
+if __name__ == "__main__":
+    cartpole_env = Environment()
+    cartpole_env.run()

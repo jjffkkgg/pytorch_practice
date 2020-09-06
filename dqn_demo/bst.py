@@ -130,9 +130,10 @@ class BinarySearchTree:
         '''모든 노드의 값을 키의 오름차순으로 반환'''
         def list_subtree(node: Node, lst: list):
             if node is not None:
-                list_subtree(node.left)
+                list_subtree(node.left, lst)
                 lst.append((node.key, node.value))
-                list_subtree(node.right)
+                list_subtree(node.right, lst)
+            return lst
 
         sorted_list = []
         return list_subtree(self.root, sorted_list)
