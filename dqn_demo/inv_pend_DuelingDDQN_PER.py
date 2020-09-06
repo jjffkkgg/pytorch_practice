@@ -126,7 +126,7 @@ class TDerrorMemory:
             self.memory.append(None)
 
         self.memory[self.index] = td_error
-        index = (index + 1) % self.capacity
+        self.index = (self.index + 1) % self.capacity
 
     def get_prioritized_indexes(self, batch_size: int) -> list:
         '''extract index from probability of TD err'''
@@ -148,8 +148,8 @@ class TDerrorMemory:
         tmp_sum_abs_td_err = 0
 
         for rand_num in rand_list:
-            while tmp_sum_abs_td_err < rand_num[1]:
-                tmp_sum_abs_td_err += (abs(self.memory(idx)) + TD_ERROR_EPSILON)
+            while tmp_sum_abs_td_err < float(rand_num[1]):
+                tmp_sum_abs_td_err += (abs(self.memory[idx]) + TD_ERROR_EPSILON)
                 idx += 1
 
             # TD_ERROR_EPSILON을 더한 영향으로 인덱스가 실제 갯수를 초과했을 경우를 위한 보정
@@ -447,7 +447,7 @@ class Environment:
 
                 self.train.mem.push(
                     state, action, new_state, reward)             # store iteration information(Transition) into memory
-                self.train.td_err_mem.update_td_error([0])          # Save err, but save 0 here(arbitary) and update below
+                self.train.td_err_mem.push(0)                     # Save err, but save 0 here(arbitary) and update below
                 self.train.replay(episode)                        # update Q with Experience Replay
                 state = new_state                                 # update state
 
