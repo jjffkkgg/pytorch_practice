@@ -1,13 +1,14 @@
 ﻿import numpy as np
 import casadi as ca
+import scipy.integrate
 from computation import Computation as comp
 import warnings
 
 class QuadRotorEnv:
 
     def __init__(self):
-        self.arm_angles_deg = [45, -135, -45, 135]
-        self.arm_angles_rad = [
+        arm_angles_deg = [45, -135, -45, 135]
+        arm_angles_rad = [
             (np.pi / 180) * i for i in arm_angles_deg
             ]
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
@@ -18,8 +19,8 @@ class QuadRotorEnv:
         self.done_threshold = [
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             20,20,20,                       # [m/s]
-            ca.pi/4, ca.pi/4, None,         # [rad]
-            250,250,1000                    # [m]
+            ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
+            250,250,0.5                    # [m]
             ]
         
         self.observation_space_size = 12    # size of state space
@@ -82,7 +83,7 @@ class QuadRotorEnv:
             ca.mtimes(ca.inv(J_b),
                       M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (angular acceleration)
             F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (acceleration)
-            euler_kinematics(euler,omega_b),                                            # omega (angular velocity) (inertial)
+            comp.euler_kinematics(euler,omega_b),                                            # omega (angular velocity) (inertial)
             ca.mtimes(C_nb, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
@@ -93,25 +94,25 @@ class QuadRotorEnv:
         action_yaw = np.array([0,0,self.action_vol,0])
         action_thrust = np.array([0,0,0,self.action_vol])
         action_dic = {
-            -4: -action_roll,
-            -3: -action_pitch,
-            -2: -action_yaw,
-            -1: -action_thrust,
-            1: action_roll,
-            2: action_pitch,
-            3: action_yaw,
-            4: action_thrust
+            0: -action_roll,
+            1: -action_pitch,
+            2: -action_yaw,
+            3: -action_thrust,
+            4: action_roll,
+            5: action_pitch,
+            6: action_yaw,
+            7: action_thrust
             }
         err_msg = "%r (%s) invalid" % (action, type(action))
-        assert (action in action_lst), err_msg                   # throw error if action not in bound
+        assert (action in action_dic), err_msg                   # throw error if action not in bound
 
         reward = 0.0
         done = False
-        u += action_dic[action]
+        self.u += action_dic[action]
 
         res = scipy.integrate.solve_ivp(
             fun=lambda t, x: np.array(self.rhs(self.xi, self.u, self.p)).reshape(-1),
-                t_span=[self.t, t+dt], t_eval=[t+dt], y0=xi
+                t_span=[self.t, self.t+dt], t_eval=[self.t+dt], y0=self.xi
         )
 
         self.xi = res['y']

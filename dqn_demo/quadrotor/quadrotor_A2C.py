@@ -8,32 +8,32 @@ from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 #get_ipython().run_line_magic('matplotlib', 'inline')
-import gym
+#import gym
 import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
 import copy
-from quadrotor import QuadRotorEnv
+from quadrotor import QuadRotorEnv 
 
 
 # In[2]:
 
 
 # set env with setting (especially reward and max episode)
-gym.envs.register(
-    id='CartPole_prefer-v0',
-    entry_point='gym.envs.classic_control:CartPoleEnv',
-    max_episode_steps=700,      # CartPole-v0 uses 200
-    reward_threshold=-110.0,
-)
+#gym.envs.register(
+#    id='CartPole_prefer-v0',
+#    entry_point='gym.envs.classic_control:CartPoleEnv',
+#    max_episode_steps=700,      # CartPole-v0 uses 200
+#    reward_threshold=-110.0,
+#)
 
 
 # In[3]:
 
 
 '''Global Variables'''
-ENV = 'CartPole_prefer-v0'  # 태스크 이름
+#ENV = 'CartPole_prefer-v0'  # 태스크 이름
 GAMMA = 0.99                # 시간할인율
 MAX_STEPS = 700             # 1에피소드 당 최대 단계 수
 NUM_EPISODES = 2000         # 최대 에피소드 수
@@ -95,7 +95,7 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.fc1 = nn.Linear(n_in,n_mid)
         self.fc2 = nn.Linear(n_mid,n_mid)
-        self.actor = nn.Linear(n_mid, n_out)        # Actor net(two action output)
+        self.actor = nn.Linear(n_mid, n_out)        # Actor net(8 action output)
         self.critic = nn.Linear(n_mid, 1)           # critic net (state value -> 1)
     
     def forward(self, x) -> list:
@@ -192,16 +192,29 @@ class Environment:
     def run(self) -> None:
         '''running entry point'''
         # 동시 실행할 환경 수 만큼 env를 생성
-        envs = [gym.make(ENV) for i in range(NUM_PROCESSES)]
+        envs = [QuadRotorEnv() for i in range(NUM_PROCESSES)]
 
         # 모든 에이전트가 공유하는 Brain 객체를 생성
-        n_in = envs[0].observation_space.shape[0]       # state inputs
-        n_out = envs[0].action_space.n                 # action outpus
-        n_mid = 32                                      # 32 mid junction
+        n_in = envs[0].observation_space_size           # state inputs
+        n_out = envs[0].action_space_size               # action outpus
+        n_mid = 48                                      # 48 mid junction
         actor_critic = Net(n_in, n_mid, n_out)          # Net init
         glob_brain = Brain(actor_critic)                # Brain init
 
         # 각종 정보를 저장하는 변수
+        l_arm = 0.3                             # length or the rotor arm [m]
+        m = 1                                   # mass of vehicle [kg]
+        rho = 1.225                             # density of air [kg/m^3]
+        r = 0.1                                 # radius of propeller
+        V = 11.1                                # voltage of battery [V]
+        kV = 1550                               # motor kV constant, [rpm/V]
+        CT = 1.0e-2                             # Thrust coeff
+        Cm = 1e-4                               # moment coeff
+        g = 9.81                                # gravitational constant [m/s^2]
+        Jx = 1
+        Jy = 1
+        Jz = 1
+        p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
         obs_shape = n_in
         current_obs = torch.zeros(NUM_PROCESSES, obs_shape)                         # (16,4) 의 tensor
         rollouts = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES,obs_shape)       # RolloutStorage init
@@ -213,7 +226,7 @@ class Environment:
         each_step = np.zeros(NUM_PROCESSES)                                         # 각 env 의 step record
         episode = 0
         # 초기 state...
-        obs = [envs[i].reset() for i in range(NUM_PROCESSES)]
+        obs = [envs[i].reset(p) for i in range(NUM_PROCESSES)]
         obs = np.array(obs)
         obs = torch.from_numpy(obs).float()                     # (16,4) 의 tensor
         current_obs = obs                                       # current obs 의 업데이트
@@ -233,12 +246,13 @@ class Environment:
 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i], _ = envs[i].step(actions[i])
+                    obs_np[i], reward_np[i], done_np[i] = envs[i].step(actions[i])
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # 지정된 step 달성 혹은 무너짐
                         if i == 0:          # 0번째의 환경 결과만 출력
-                            print(f'{episode} Episode: Finished after {each_step[i] + 1} steps')
+                            print(f'{episode} Episode: Finished after'
+                                 '{(each_step[i] + 1)*100} seconds')
                         episode += 1
                         # 보상 부여
                         if each_step[i] < (MAX_STEPS - 5):
@@ -247,7 +261,7 @@ class Environment:
                             reward_np[i] = 1.0      # 성공했을때
                         
                         each_step[i] = 0            # step 초기화
-                        obs_np[i] = envs[i].reset() # 환경 초기화
+                        obs_np[i] = envs[i].reset(p) # 환경 초기화
                     else:                           # 무너지거나 성공도 아님
                         reward_np[i] = 0.0
                         each_step[i] += 1           # 그대로 진행
