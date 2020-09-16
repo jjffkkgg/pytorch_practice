@@ -20,7 +20,7 @@ class QuadRotorEnv:
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             20,20,20,                       # [m/s]
             ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
-            250,250,0.5                    # [m]
+            1,1,5                    # [m]
             ]
         
         self.observation_space_size = 12    # size of state space
@@ -145,7 +145,7 @@ class QuadRotorEnv:
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.zeros(4)
+        self.u = np.array([0.0,0.0,0.0,2.0])
         self.t = 0
 
         return self.xi

@@ -35,8 +35,8 @@ from quadrotor import QuadRotorEnv
 '''Global Variables'''
 #ENV = 'CartPole_prefer-v0'  # 태스크 이름
 GAMMA = 0.99                # 시간할인율
-MAX_STEPS = 700             # 1에피소드 당 최대 단계 수
-NUM_EPISODES = 2000         # 최대 에피소드 수
+MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수
+NUM_EPISODES = 4000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 5       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -64,7 +64,7 @@ class RolloutStorage(object):
 
     def insert(self, current_obs: tensor, action: tensor, reward: tensor, mask: FloatTensor) -> None:
         '''현재 인덱스 위치에 transition을 저장'''
-        self.observations[self.index + 1].copy_(current_obs)
+        self.observations[self.index + 1].copy_(current_obs)        # torch.size([6, 32, 12])
         self.masks[self.index + 1].copy_(mask)
         self.rewards[self.index].copy_(reward)
         self.actions[self.index].copy_(action)
@@ -143,27 +143,27 @@ class Brain(object):
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
-        obs_shape = rollouts.observations.size()[2:]    # torch.Size([4, 84, 84])
+        obs_shape = rollouts.observations.size()[2:]    # torch.Size([12])
         num_steps = NUM_ADVANCED_STEP
         num_processes = NUM_PROCESSES
 
         values, action_log_probs, entropy = self.actor_critic.evaluate_actions(
-            rollouts.observations[:-1].view(-1,4),
+            rollouts.observations[:-1].view(-1,12),
             rollouts.actions.view(-1,1)
         )
 
         # 주의 : 각 변수의 크기
-        # rollouts.observations[:-1].view(-1, 4) torch.Size([80, 4])
-        # rollouts.actions.view(-1, 1) torch.Size([80, 1])
+        # rollouts.observations[:-1].view(-1, 4) torch.Size([192, 12])
+        # rollouts.actions.view(-1, 1) torch.Size([192, 8])
         # values torch.Size([80, 1])
         # action_log_probs torch.Size([80, 1])
         # entropy torch.Size([])
 
-        values = values.view(num_steps, num_processes, 1)   # torch.Size([5, 16, 1])
+        values = values.view(num_steps, num_processes, 1)   # torch.Size([5, 32, 1])
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
 
         # advantage(행동가치-상태가치) 계산
-        advantages = rollouts.returns[:-1] - values          # torch.Size([5, 16, 1])
+        advantages = rollouts.returns[:-1] - values          # torch.Size([6, 32, 1])
 
         # Critic loss 계산
         value_loss = advantages.pow(2).mean()
@@ -228,7 +228,7 @@ class Environment:
         # 초기 state...
         obs = [envs[i].reset(p) for i in range(NUM_PROCESSES)]
         obs = np.array(obs)
-        obs = torch.from_numpy(obs).float()                     # (16,4) 의 tensor
+        obs = torch.from_numpy(obs).float()                     # (32,12) 의 tensor
         current_obs = obs                                       # current obs 의 업데이트
 
         # advanced 학습(action actor)에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
@@ -252,7 +252,7 @@ class Environment:
                     if done_np[i]:          # 지정된 step 달성 혹은 무너짐
                         if i == 0:          # 0번째의 환경 결과만 출력
                             print(f'{episode} Episode: Finished after'
-                                 '{(each_step[i] + 1)*100} seconds')
+                                 f'{(each_step[i] + 1)/100} seconds')
                         episode += 1
                         # 보상 부여
                         if each_step[i] < (MAX_STEPS - 5):
@@ -285,7 +285,7 @@ class Environment:
                 current_obs *= masks
 
                 # current_obs를 업데이트
-                obs = torch.from_numpy(obs_np).float()  # torch.Size([16, 4])
+                obs = torch.from_numpy(obs_np).float()  # torch.Size([32, 12])
                 current_obs = obs  # 최신 상태의 obs를 저장
 
                 # 메모리 객체에 현 단계의 transition을 저장
