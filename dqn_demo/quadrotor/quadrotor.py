@@ -13,14 +13,17 @@ class QuadRotorEnv:
             ]
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
-        self.action_vol = 0.1               # [V]
+        self.action_roll = 0.0001               # [V]
+        self.action_pitch = 0.0001
+        self.action_yaw = 0.001
+        self.action_thrust = 0.25
         self.steps_beyond_done = None
 
         self.done_threshold = [
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
-            20,20,20,                       # [m/s]
+            0.01,0.01,0.01,                       # [m/s]
             ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
-            1,1,5                    # [m]
+            50,50,50                    # [m]
             ]
         
         self.observation_space_size = 12    # size of state space
@@ -57,9 +60,9 @@ class QuadRotorEnv:
         J_b = ca.diag(ca.vertcat(Jx, Jy, Jz))                         # Moment of inertia of quadrotor
 
         # forces and moments
-        C_nb = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
+        C_bn = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
         F_b = ca.vertcat(0, 0, 0)
-        F_b = ca.mtimes(C_nb.T, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+        F_b = ca.mtimes(C_bn.T, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
         M_b = ca.SX.zeros(3)                                          # Body moment(torque) Initialize
         u_motor = comp.saturate(
             comp.mix2motor(u_mix), len(motor_dirs)
@@ -83,16 +86,16 @@ class QuadRotorEnv:
             ca.mtimes(ca.inv(J_b),
                       M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (angular acceleration)
             F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (acceleration)
-            comp.euler_kinematics(euler,omega_b),                                            # omega (angular velocity) (inertial)
-            ca.mtimes(C_nb, vel_b),                                                     # v (velocity) (inertial)
+            comp.euler_kinematics(euler,omega_b),                                       # omega (angular velocity) (inertial)
+            ca.mtimes(C_bn, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
     def step(self, action, dt=0.01):
 
-        action_roll = np.array([self.action_vol,0,0,0])
-        action_pitch = np.array([0,self.action_vol,0,0])
-        action_yaw = np.array([0,0,self.action_vol,0])
-        action_thrust = np.array([0,0,0,self.action_vol])
+        action_roll = np.array([self.action_roll,0,0,0])
+        action_pitch = np.array([0,self.action_pitch,0,0])
+        action_yaw = np.array([0,0,self.action_yaw,0])
+        action_thrust = np.array([0,0,0,self.action_thrust])
         action_dic = {
             0: -action_roll,
             1: -action_pitch,
@@ -115,8 +118,13 @@ class QuadRotorEnv:
                 t_span=[self.t, self.t+dt], t_eval=[self.t+dt], y0=self.xi
         )
 
-        self.xi = res['y']
-        self.xi = np.array(self.xi).reshape(-1)
+        xi_new = res['y']
+        #if xi_new[11] <= 0:         # ground constraint
+        #    xi_new[11] = 0
+        #    xi_new[0] = 0
+        #    xi_new[1] = 0
+        #    xi_new[2] = 0
+        self.xi = np.array(xi_new).reshape(-1)
         self.t += dt
 
         for i in range(len(self.xi)):

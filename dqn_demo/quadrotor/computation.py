@@ -25,9 +25,9 @@ class Computation:
     def euler_kinematics(e, w):
         '''Derivative of Euler angles'''
         v = ca.SX.sym('v',3)
-        v[0] = (w[1]*ca.sin(e[2])+w[2]*ca.cos(e[2]))/ca.cos(e[1])
+        v[0] = w[0] + (w[1]*ca.sin(e[2]+w[2]*ca.cos(e[2])))*ca.tan(e[1])
         v[1] = w[1]*ca.cos(e[2]) - w[2]*ca.sin(e[2])
-        v[2] = w[0] + (w[1]*ca.sin(e[2]+w[2]*ca.cos(e[2])))*ca.tan(e[1])
+        v[2] = (w[1]*ca.sin(e[2])+w[2]*ca.cos(e[2]))/ca.cos(e[1])
         return v
 
     @staticmethod
@@ -52,8 +52,7 @@ class Computation:
             [0, ca.sin(phi), ca.cos(phi)]
         ])
 
-        R_zy = np.dot(R_z, R_y)
-        R = np.dot(R_zy, R_x)
+        R = np.dot(np.dot(R_z, R_y), R_x)
     
         return R
 
@@ -61,23 +60,19 @@ class Computation:
     def motor2mix(u_motor):
         '''from each motor duty to effect toward control angles'''
         map = np.array([
-            [-1,1,1,-1],
-            [1,-1,1,-1],
-            [1,1,-1,-1],
+            [1,-1,-1,1],
+            [-1,1,-1,1],
+            [-1,-1,1,1],
             [1,1,1,1]])
         return ca.mtimes(map,u_motor)
-
-        np.array([
-                  [1,2,3,4]
-        ])
 
     @staticmethod
     def mix2motor(u_mix):
         '''from input of control to each motor duty'''
         map = np.linalg.inv(np.array([
-            [-1,1,1,-1],
-            [1,-1,1,-1],
-            [1,1,-1,-1],
+            [1,-1,-1,1],
+            [-1,1,-1,1],
+            [-1,-1,1,1],
             [1,1,1,1]]))
         return ca.mtimes(map,u_mix)
 

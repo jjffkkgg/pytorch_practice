@@ -36,7 +36,7 @@ from quadrotor import QuadRotorEnv
 #ENV = 'CartPole_prefer-v0'  # 태스크 이름
 GAMMA = 0.99                # 시간할인율
 MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수
-NUM_EPISODES = 4000         # 최대 에피소드 수
+NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 5       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -197,13 +197,13 @@ class Environment:
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
-        n_mid = 48                                      # 48 mid junction
+        n_mid = 96                                      # 48 mid junction
         actor_critic = Net(n_in, n_mid, n_out)          # Net init
         glob_brain = Brain(actor_critic)                # Brain init
 
         # 각종 정보를 저장하는 변수
         l_arm = 0.3                             # length or the rotor arm [m]
-        m = 1                                   # mass of vehicle [kg]
+        m = 1.3                                 # mass of vehicle [kg]
         rho = 1.225                             # density of air [kg/m^3]
         r = 0.1                                 # radius of propeller
         V = 11.1                                # voltage of battery [V]
@@ -211,9 +211,9 @@ class Environment:
         CT = 1.0e-2                             # Thrust coeff
         Cm = 1e-4                               # moment coeff
         g = 9.81                                # gravitational constant [m/s^2]
-        Jx = 1
-        Jy = 1
-        Jz = 1
+        Jx = 0.021                              # Moment of inertia Ixx [kg*m^2]
+        Jy = 0.021                              # Moment of inertia Iyy [kg*m^2]
+        Jz = 0.042                              # Moment of inertia Izz [kg*m^2]
         p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
         obs_shape = n_in
         current_obs = torch.zeros(NUM_PROCESSES, obs_shape)                         # (16,4) 의 tensor
@@ -250,9 +250,10 @@ class Environment:
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # 지정된 step 달성 혹은 무너짐
-                        if i == 0:          # 0번째의 환경 결과만 출력
-                            print(f'{episode} Episode: Finished after'
-                                 f'{(each_step[i] + 1)/100} seconds')
+                        print(f'{episode}: {(each_step[i] + 1)/100} [s]')
+                        #if i == 0:          # 0번째의 환경 결과만 출력
+                        #    print(f'{episode} Episode: Finished after'
+                        #         f'{(each_step[i] + 1)/100} seconds')
                         episode += 1
                         # 보상 부여
                         if each_step[i] < (MAX_STEPS - 5):
