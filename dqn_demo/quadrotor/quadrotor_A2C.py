@@ -18,24 +18,18 @@ from quadrotor import QuadRotorEnv
 
 
 # In[2]:
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
+print(device)
 
-
-# set env with setting (especially reward and max episode)
-#gym.envs.register(
-#    id='CartPole_prefer-v0',
-#    entry_point='gym.envs.classic_control:CartPoleEnv',
-#    max_episode_steps=700,      # CartPole-v0 uses 200
-#    reward_threshold=-110.0,
-#)
 
 
 # In[3]:
 
 
 '''Global Variables'''
-#ENV = 'CartPole_prefer-v0'  # 태스크 이름
 GAMMA = 0.99                # 시간할인율
-MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수
+MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
 NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
@@ -53,13 +47,13 @@ class RolloutStorage(object):
     '''Advantage 학습에 사용할 메모리 클래스'''
     def __init__(self, num_steps: int, num_processes: int, obs_shape: int) -> None:
         '''initialize tensors for work'''
-        self.observations = torch.zeros(num_steps + 1, num_processes, obs_shape)        # obs tensor init
-        self.masks = torch.ones(num_steps + 1, num_processes, 1)                        # mask -> is end of episode ? 0 | 1
-        self.rewards = torch.zeros(num_steps, num_processes, 1)
-        self.actions = torch.zeros(num_steps, num_processes, 1).long()
+        self.observations = torch.zeros(num_steps + 1, num_processes, obs_shape).to(device)        # obs tensor init
+        self.masks = torch.ones(num_steps + 1, num_processes, 1).to(device)                        # mask -> is end of episode ? 0 | 1
+        self.rewards = torch.zeros(num_steps, num_processes, 1).to(device)  
+        self.actions = torch.zeros(num_steps, num_processes, 1).long().to(device)
 
         # 할인 총 보상(J(theta,s_t))저장하는 메모리 (Actor)
-        self.returns = torch.zeros(num_steps + 1, num_processes, 1)
+        self.returns = torch.zeros(num_steps + 1, num_processes, 1).to(device)
         self.index = 0              # insert 하는 index          
 
     def insert(self, current_obs: tensor, action: tensor, reward: tensor, mask: FloatTensor) -> None:
@@ -198,7 +192,7 @@ class Environment:
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
         n_mid = 96                                      # 48 mid junction
-        actor_critic = Net(n_in, n_mid, n_out)          # Net init
+        actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                # Brain init
 
         # 각종 정보를 저장하는 변수
@@ -216,13 +210,15 @@ class Environment:
         Jz = 0.042                              # Moment of inertia Izz [kg*m^2]
         p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
         obs_shape = n_in
-        current_obs = torch.zeros(NUM_PROCESSES, obs_shape)                         # (16,4) 의 tensor
+        current_obs = torch.zeros(NUM_PROCESSES, obs_shape).to(device)                         # (16,4) 의 tensor
         rollouts = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES,obs_shape)       # RolloutStorage init
         episode_rewards = torch.zeros(NUM_PROCESSES, 1)                             # 현재 episode 의 reward
         final_rewards = torch.zeros(NUM_PROCESSES, 1)                               # 마지막 episode 의 reward
         obs_np = np.zeros([NUM_PROCESSES, obs_shape])                               # state 배열
         reward_np = np.zeros([NUM_PROCESSES, 1])                                    # 보상의 배열
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
+        arrive_np = np.zeros([NUM_PROCESSES, 1])                                    # Arrive 여부의 배열
+        arrive_time = []                                                            # Arrive time 의 저장 버퍼
         each_step = np.zeros(NUM_PROCESSES)                                         # 각 env 의 step record
         episode = 0
         # 초기 state...
@@ -246,22 +242,27 @@ class Environment:
 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i] = envs[i].step(actions[i])
+                    obs_np[i], reward_np[i], done_np[i], arrive_np[i] = envs[i].step(actions[i], each_step[i])
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # 지정된 step 달성 혹은 무너짐
                         print(f'{episode}: {(each_step[i] + 1)/100} [s]')
-                        #if i == 0:          # 0번째의 환경 결과만 출력
-                        #    print(f'{episode} Episode: Finished after'
-                        #         f'{(each_step[i] + 1)/100} seconds')
                         episode += 1
-                        # 보상 부여
-                        if each_step[i] < (MAX_STEPS - 5):
-                            reward_np[i] = -1.0     # 무너졌을때
+                        if arrive_np[i]:
+                            print('arrived!')
+                            if len(arrive_time) == 0:
+                                reward_np[i] = 20.0
+                                arrive_time.append(each_step[i] / 100)
+                            else:
+                                for j in arrive_time:
+                                    if j > (each_step[i] / 100):
+                                        arrive_time.append(each_step[i] / 100)
+                                        reward_np[i] = 20.0
+                                    else: 
+                                        reward_np[i] = 0.0
                         else:
-                            reward_np[i] = 1.0      # 성공했을때
-                        
-                        each_step[i] = 0            # step 초기화
+                            reward_np[i] = -10.0
+                        each_step[i] = 0.0            # step 초기화
                         obs_np[i] = envs[i].reset(p) # 환경 초기화
                     else:                           # 무너지거나 성공도 아님
                         reward_np[i] = 0.0
