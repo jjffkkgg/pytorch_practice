@@ -245,20 +245,20 @@ class Environment:
                     obs_np[i], reward_np[i], done_np[i], arrive_np[i] = envs[i].step(actions[i], each_step[i])
 
                     # episode의 종료가치, state_next를 설정
-                    if done_np[i]:          # 지정된 step 달성 혹은 무너짐
+                    if done_np[i]:          # success or fail
                         print(f'{episode}: {(each_step[i] + 1)/100} [s]')
                         episode += 1
-                        if arrive_np[i]:
+                        if arrive_np[i]:    # done with arrival
                             print('arrived!')
-                            if len(arrive_time) == 0:
+                            if len(arrive_time) == 0:   # First arrival
                                 reward_np[i] = 20.0
                                 arrive_time.append(each_step[i] / 100)
                             else:
                                 for j in arrive_time:
-                                    if j > (each_step[i] / 100):
+                                    if j > (each_step[i] / 100):    # better record of success
                                         arrive_time.append(each_step[i] / 100)
                                         reward_np[i] = 20.0
-                                    else: 
+                                    else:                           # poor or same performace to last success
                                         reward_np[i] = 0.0
                         else:
                             reward_np[i] = -10.0

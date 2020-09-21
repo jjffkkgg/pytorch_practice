@@ -135,9 +135,11 @@ class QuadRotorEnv:
             if self.xi[i] >= self.done_threshold[i] or\
                 self.xi[i] <= -self.done_threshold[i]:
                 done = True
+                print('over the limit!')
 
         if self.xi[11] <= 0 and step >= 100:
             done = True
+            print('crashed to ground')
         
         if np.linalg.norm(self.xi[9:12] - self.endpoint) <= 0.5:
             if np.linalg.norm(self.xi[3:6]) <= 0.01:
@@ -167,7 +169,7 @@ class QuadRotorEnv:
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.array([0.0,0.0,0.0,3.0])
+        self.u = np.array([0.0,0.0,0.0,0.0])
         self.t = 0
 
         return self.xi
