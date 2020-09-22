@@ -7,7 +7,7 @@ import warnings
 
 class QuadRotorEnv:
 
-    def __init__(self, lim: list, num_obstacle: int = 10) -> None:
+    def __init__(self, lim: list) -> None:
         # init of system config
         arm_angles_deg = [45, -135, -45, 135]
         arm_angles_rad = [
@@ -27,11 +27,11 @@ class QuadRotorEnv:
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             30,30,30,                       # [m/s]
             ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
-            xlim,ylim,zlim                    # [m]
+            lim[0],lim[1],lim[2]                    # [m]
             ]
 
         # start - end
-        self.endpoint = np.array([15, 15, 5])   # [m]
+        self.endpoint = np.array([50, 70, 5])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -39,7 +39,7 @@ class QuadRotorEnv:
 
         # defining test space
         self.test_space = Obstacle(lim)
-        self.test_space.rand_wall_sq(num_obstacle)
+        self.test_space.rand_wall_sq(self.endpoint, num=10)
 
         # state (x)
         x = ca.SX.sym(
@@ -145,6 +145,9 @@ class QuadRotorEnv:
         self.xi = np.array(xi_new).reshape(-1)
         self.t += dt
 
+        # calculate distance to endpoint
+        distance = np.linalg.norm(self.xi[9:12] - self.endpoint)
+
         # done by exceeding state limit
         for i in range(len(self.xi)):
             if self.xi[i] >= self.done_threshold[i] or\
@@ -163,8 +166,9 @@ class QuadRotorEnv:
             print('crashed to obstacle')
         
         # arrival cases
-        if np.linalg.norm(self.xi[9:12] - self.endpoint) <= 0.5:
-            if np.linalg.norm(self.xi[3:6]) <= 0.01:        # arrive with stop(hover)
+        if distance <= 0.1:
+            if np.linalg.norm(self.xi[3:6]) <= 0.01 and\
+                np.linalg.norm(self.xi[0:3]) <= ca.pi/100:        # arrive with stop(hover)
                 arrive = True
                 done = True
             else:                                           # arrive without hover(pass-by)
@@ -185,14 +189,14 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, reward, done, arrive
+        return self.xi, reward, done, arrive, distance
 
     def reset(self, p):
         '''reset the environment. (init state)'''
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.array([0.0,0.0,0.0,0.0])
+        self.u = np.array([0.0,0.0,0.0,3.0])
         self.t = 0
         self.radius = 2 * self.p[1]
 

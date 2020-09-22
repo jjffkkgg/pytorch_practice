@@ -32,7 +32,7 @@ MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second 
 NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 5       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 50       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.01        # Local min 에서 벗어나기 위한 엔트로피 상수
@@ -182,11 +182,11 @@ class Brain(object):
 
 
 class Environment:
-    def run(self, xli) -> None:
+    def run(self) -> None:
         '''running entry point'''
         # 동시 실행할 환경 수 만큼 env를 생성
         space_lim = [500, 500, 500]
-        envs = [QuadRotorEnv(space_lim, num_obstacle = 20) for i in range(NUM_PROCESSES)]
+        envs = [QuadRotorEnv(space_lim) for i in range(NUM_PROCESSES)]
 
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs
@@ -219,6 +219,7 @@ class Environment:
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
         arrive_np = np.zeros([NUM_PROCESSES, 1])                                    # Arrive 여부의 배열
         arrive_time = []                                                            # Arrive time 의 저장 버퍼
+        distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         each_step = np.zeros(NUM_PROCESSES)                                         # 각 env 의 step record
         episode = 0
         # 초기 state...
@@ -242,11 +243,12 @@ class Environment:
 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i], arrive_np[i] = envs[i].step(actions[i], each_step[i])
+                    obs_np[i], reward_np[i], done_np[i], arrive_np[i], distance_np[i]\
+                       = envs[i].step(actions[i], each_step[i])
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
-                        print(f'{episode}: {(each_step[i] + 1)/100} [s]')
+                        print(f'{episode} set, {i} slot: {(each_step[i] + 1)/100} [s]')
                         episode += 1
                         if arrive_np[i]:    # done with arrival
                             print('arrived!')
@@ -261,7 +263,10 @@ class Environment:
                                     else:                           # poor or same performace to last success
                                         reward_np[i] = 0.0
                         else:
-                            reward_np[i] = -10.0
+                            if distance_np[i] <= 10:
+                                reward_np[i] = 0.1
+                            else:
+                                reward_np[i] = -10.0
                         each_step[i] = 0.0            # step 초기화
                         obs_np[i] = envs[i].reset(p) # 환경 초기화
                     else:                           # 무너지거나 성공도 아님

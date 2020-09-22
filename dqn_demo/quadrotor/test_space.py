@@ -8,30 +8,34 @@ class Obstacle:
         self.ylim = lim[1]
         self.zlim = lim[2]
         self.num_block = 0
-        self.wallcenter = np.zeros([1,3])
-        self.wallLen = np.zeros([1,3])
+        self.wallcenter = np.array([10,10,10])      # hardcoded init condition. need fix
+        self.wallLen = np.array([1,1,20])
 
     def wall_coord(self, center: array, length: array) -> None:
         '''create obstacle with size'''
         err_msg = "wall location out of limit"
-        assert (abs(center[0]) + xlen*0.5) <= xlim and \
-                (abs(center[1]) + ylen*0.5) <= ylim and \
-                (zlen <= zlim) and (zlen > 0), err_msg
+        assert (abs(center[0]) + length[0]*0.5) <= self.xlim and \
+                (abs(center[1]) + length[1]*0.5) <= self.ylim and \
+                (length[2] <= self.zlim) and (length[2] >= 0), err_msg
 
         self.wallcenter = np.vstack((self.wallcenter, center))
         self.wallLen = np.vstack((self.wallLen, length))
         
         self.num_block += 1
 
-    def rand_wall_sq(self, num: int) -> None:
+    def rand_wall_sq(self, end: array, num: int = 1) -> None:
         '''create random 1x1xrandZ obstacles'''
         for i in range(num):
-            centerX = np.random.randint(-(self.xlim-1),(self.xlim-1))
-            centerY = np.random.randint(-(self.ylim-1),(self.ylim-1))
-            centerZ = np.random.randint(-(self.zlim-1),(self.zlim-1))
-            randZ = np.random.uniform(0, self.zlim)
+            while True:
+                centerX = np.random.uniform(-(self.xlim-1),(self.xlim-1))
+                centerY = np.random.uniform(-(self.ylim-1),(self.ylim-1))
+                centerZ = np.random.uniform(0,(self.zlim-1)*0.5)
+                if (abs(centerX) > 10 and abs(centerY) > 10 and
+                    centerX-end[0] > 10 and centerY-end[1] > 10):           # avoid starting & endpoint obstacle
+                    break
+            #randZ = np.random.uniform(0, self.zlim)
             center = np.array([centerX, centerY, centerZ])
-            len = np.array([1, 1, randZ])
+            len = np.array([1, 1, 2*centerZ])
             self.wall_coord(center, len)
 
 
@@ -50,3 +54,5 @@ class Obstacle:
         for i in range(len(self.wallcenter)):
             if distance[i] < radius:
                 return True
+
+        return False
