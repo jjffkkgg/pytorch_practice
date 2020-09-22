@@ -26,7 +26,6 @@ print(device)
 
 # In[3]:
 
-
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
 MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
@@ -183,10 +182,11 @@ class Brain(object):
 
 
 class Environment:
-    def run(self) -> None:
+    def run(self, xli) -> None:
         '''running entry point'''
         # 동시 실행할 환경 수 만큼 env를 생성
-        envs = [QuadRotorEnv() for i in range(NUM_PROCESSES)]
+        space_lim = [500, 500, 500]
+        envs = [QuadRotorEnv(space_lim, num_obstacle = 20) for i in range(NUM_PROCESSES)]
 
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs

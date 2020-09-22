@@ -2,35 +2,44 @@
 import casadi as ca
 import scipy.integrate
 from computation import Computation as comp
+from test_space import Obstacle
 import warnings
 
 class QuadRotorEnv:
 
-    def __init__(self):
+    def __init__(self, lim: list, num_obstacle: int = 10) -> None:
+        # init of system config
         arm_angles_deg = [45, -135, -45, 135]
         arm_angles_rad = [
             (np.pi / 180) * i for i in arm_angles_deg
             ]
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
+        # control input per step(0.01s)
         self.action_roll = 0.0001               # [V]
         self.action_pitch = 0.0001
         self.action_yaw = 0.001
         self.action_thrust = 0.25
         self.steps_beyond_done = None
 
+        # state limit of system
         self.done_threshold = [
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             30,30,30,                       # [m/s]
             ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
-            500,500,500                    # [m]
+            xlim,ylim,zlim                    # [m]
             ]
 
+        # start - end
         self.endpoint = np.array([15, 15, 5])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
         self.action_space_size = 8          # size of action space
+
+        # defining test space
+        self.test_space = Obstacle(lim)
+        self.test_space.rand_wall_sq(num_obstacle)
 
         # state (x)
         x = ca.SX.sym(
@@ -71,6 +80,7 @@ class QuadRotorEnv:
             comp.mix2motor(u_mix), len(motor_dirs)
             )                                                         # convert u_mix(angle input) to motor duty
 
+        # sum up forces and moments
         for i in range(n_motors):
             ri_b = ca.vertcat(
                 l_arm*ca.cos(arm_angles_rad[i]),
@@ -85,6 +95,7 @@ class QuadRotorEnv:
             F_b += Fi_b_vec                                                             # sum up all rotor F vector
             M_b += Mi_b_vec + ca.cross(ri_b, Fi_b_vec)                                  # sum up all rotor M vector & M from each leg
 
+        # Equation of Motion of system
         self.rhs = ca.Function('rhs',[x,u_mix,p],[ca.vertcat(
             ca.mtimes(ca.inv(J_b),
                       M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (angular acceleration)
@@ -93,8 +104,8 @@ class QuadRotorEnv:
             ca.mtimes(C_bn, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
-    def step(self, action, step, dt=0.01):
-
+    def step(self, action: int, step, dt=0.01):
+        '''calculate state after step input'''
         action_roll = np.array([self.action_roll,0,0,0])
         action_pitch = np.array([0,self.action_pitch,0,0])
         action_yaw = np.array([0,0,self.action_yaw,0])
@@ -112,18 +123,21 @@ class QuadRotorEnv:
         err_msg = "%r (%s) invalid" % (action, type(action))
         assert (action in action_dic), err_msg                   # throw error if action not in bound
 
+        # init vars
         reward = 0.0
         done = False
         arrive = False
         self.u += action_dic[action]
 
+        # calculate next step state
         res = scipy.integrate.solve_ivp(
             fun=lambda t, x: np.array(self.rhs(self.xi, self.u, self.p)).reshape(-1),
                 t_span=[self.t, self.t+dt], t_eval=[self.t+dt], y0=self.xi
         )
 
+        # ground constraint
         xi_new = res['y']
-        if xi_new[11] < 0:         # ground constraint
+        if xi_new[11] < 0:
             xi_new[11] = 0
             xi_new[0] = 0
             xi_new[1] = 0
@@ -131,27 +145,36 @@ class QuadRotorEnv:
         self.xi = np.array(xi_new).reshape(-1)
         self.t += dt
 
+        # done by exceeding state limit
         for i in range(len(self.xi)):
             if self.xi[i] >= self.done_threshold[i] or\
                 self.xi[i] <= -self.done_threshold[i]:
                 done = True
                 print('over the limit!')
 
+        # done by ground crash
         if self.xi[11] <= 0 and step >= 100:
             done = True
             print('crashed to ground')
+
+        # done by obstacle crash
+        if self.test_space.is_collide(self.xi[9:12], self.radius):
+            done = True
+            print('crashed to obstacle')
         
+        # arrival cases
         if np.linalg.norm(self.xi[9:12] - self.endpoint) <= 0.5:
-            if np.linalg.norm(self.xi[3:6]) <= 0.01:
+            if np.linalg.norm(self.xi[3:6]) <= 0.01:        # arrive with stop(hover)
                 arrive = True
                 done = True
-            else:
+            else:                                           # arrive without hover(pass-by)
                 done = True
-
+        
+        # exception management
         if not done:
             reward = 1.0
         elif self.steps_beyond_done is None:
-            # pole just fell!
+            # just done with sim!
             self.steps_beyond_done = 0
             reward = 1.0
         else:
@@ -165,12 +188,13 @@ class QuadRotorEnv:
         return self.xi, reward, done, arrive
 
     def reset(self, p):
-
+        '''reset the environment. (init state)'''
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
         self.u = np.array([0.0,0.0,0.0,0.0])
         self.t = 0
+        self.radius = 2 * self.p[1]
 
         return self.xi
         
