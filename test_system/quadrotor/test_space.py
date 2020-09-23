@@ -11,7 +11,7 @@ class Obstacle:
         self.wallcenter = np.array([10,10,10])      # hardcoded init condition. need fix
         self.wallLen = np.array([1,1,20])
 
-    def wall_coord(self, center: array, length: array) -> None:
+    def wall_coord(self, center: np.array, length: np.array) -> None:
         '''create obstacle with size'''
         err_msg = "wall location out of limit"
         assert (abs(center[0]) + length[0]*0.5) <= self.xlim and \
@@ -23,7 +23,7 @@ class Obstacle:
         
         self.num_block += 1
 
-    def rand_wall_sq(self, end: array, num: int = 1) -> None:
+    def rand_wall_sq(self, end: np.array, num: int = 1) -> None:
         '''create random 1x1xrandZ obstacles'''
         for i in range(num):
             while True:
@@ -39,7 +39,7 @@ class Obstacle:
             self.wall_coord(center, len)
 
 
-    def is_collide(self, center: array, radius: float) -> bool:
+    def is_collide(self, center: np.array, radius: float) -> bool:
         '''check collision between sphere and obstacle'''
         sphcenter_np = center
         for i in range(len(self.wallcenter) - 1):

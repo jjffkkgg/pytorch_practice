@@ -252,7 +252,7 @@ class Environment:
                         episode += 1
                         if arrive_np[i]:    # done with arrival
                             reward_np[i] = 20
-                            #print('arrived!')
+                            print('arrived!')
                             #if len(arrive_time) == 0:   # First arrival
                             #    reward_np[i] = 20.0
                             #    arrive_time.append(each_step[i] / 100)
@@ -315,8 +315,8 @@ class Environment:
             glob_brain.update(rollouts)
             rollouts.after_update()
 
-            # 모든 환경이 성공
-            if final_rewards.sum().numpy() >= NUM_PROCESSES:
+            # 모든 환경이 성공(도착)
+            if final_rewards.sum().numpy() >= NUM_PROCESSES*20:
                 print('모든 환경 성공')
                 break
 
