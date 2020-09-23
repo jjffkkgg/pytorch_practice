@@ -251,17 +251,18 @@ class Environment:
                         print(f'{episode} set, {i} slot: {(each_step[i] + 1)/100} [s]')
                         episode += 1
                         if arrive_np[i]:    # done with arrival
-                            print('arrived!')
-                            if len(arrive_time) == 0:   # First arrival
-                                reward_np[i] = 20.0
-                                arrive_time.append(each_step[i] / 100)
-                            else:
-                                for j in arrive_time:
-                                    if j > (each_step[i] / 100):    # better record of success
-                                        arrive_time.append(each_step[i] / 100)
-                                        reward_np[i] = 20.0
-                                    else:                           # poor or same performace to last success
-                                        reward_np[i] = 0.0
+                            reward_np[i] = 20
+                            #print('arrived!')
+                            #if len(arrive_time) == 0:   # First arrival
+                            #    reward_np[i] = 20.0
+                            #    arrive_time.append(each_step[i] / 100)
+                            #else:
+                            #    for j in arrive_time:
+                            #        if j > (each_step[i] / 100):    # better record of success
+                            #            arrive_time.append(each_step[i] / 100)
+                            #            reward_np[i] = 20.0
+                            #        else:                           # poor or same performace to last success (probably not needed because of gamma)
+                            #            reward_np[i] = 0.0
                         else:
                             if distance_np[i] <= 10:
                                 reward_np[i] = 0.1

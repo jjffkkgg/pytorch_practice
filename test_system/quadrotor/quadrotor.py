@@ -39,7 +39,7 @@ class QuadRotorEnv:
 
         # defining test space
         self.test_space = Obstacle(lim)
-        self.test_space.rand_wall_sq(self.endpoint, num=10)
+        self.test_space.rand_wall_sq(self.endpoint, num=50)
 
         # state (x)
         x = ca.SX.sym(
