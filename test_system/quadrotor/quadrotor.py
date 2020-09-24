@@ -19,7 +19,7 @@ class QuadRotorEnv:
         self.action_roll = 0.0001               # [V]
         self.action_pitch = 0.0001
         self.action_yaw = 0.001
-        self.action_thrust = 0.25
+        self.action_thrust = 0.2
         self.steps_beyond_done = None
 
         # state limit of system
@@ -31,7 +31,7 @@ class QuadRotorEnv:
             ]
 
         # start - end
-        self.endpoint = np.array([50, 70, 5])   # [m]
+        self.endpoint = np.array([0, 0, 10])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -127,6 +127,8 @@ class QuadRotorEnv:
         reward = 0.0
         done = False
         arrive = False
+        arrive_turn = False
+        pass_by = False
         self.u += action_dic[action]
 
         # calculate next step state
@@ -167,11 +169,18 @@ class QuadRotorEnv:
         
         # arrival cases
         if distance <= 0.1:
-            if np.linalg.norm(self.xi[3:6]) <= 0.01 and\
-                np.linalg.norm(self.xi[0:3]) <= ca.pi/100:        # arrive with stop(hover)
-                arrive = True
-                done = True
+            if np.linalg.norm(self.xi[3:6]) <= 0.05:
+                if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
+                    print('arrived!')
+                    arrive = True
+                    done = True
+                else:
+                    print('hover with turning')
+                    arrive_turn = True
+                    done = True
             else:                                           # arrive without hover(pass-by)
+                print('get close but not hover')
+                pass_by = True
                 done = True
         
         # exception management
@@ -189,7 +198,7 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, reward, done, arrive, distance
+        return self.xi, reward, done, np.array([arrive, arrive_turn, pass_by])
 
     def reset(self, p):
         '''reset the environment. (init state)'''

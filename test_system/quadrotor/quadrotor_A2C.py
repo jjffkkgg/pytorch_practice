@@ -7,6 +7,9 @@
 from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Line3D
+import matplotlib.animation as animation
 #get_ipython().run_line_magic('matplotlib', 'inline')
 #import gym
 import torch
@@ -32,7 +35,7 @@ MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second 
 NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 50       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 10       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.01        # Local min 에서 벗어나기 위한 엔트로피 상수
@@ -191,7 +194,7 @@ class Environment:
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
-        n_mid = 96                                      # 48 mid junction
+        n_mid = 192                                      # 384 mid junction
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                # Brain init
 
@@ -217,11 +220,14 @@ class Environment:
         obs_np = np.zeros([NUM_PROCESSES, obs_shape])                               # state 배열
         reward_np = np.zeros([NUM_PROCESSES, 1])                                    # 보상의 배열
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
-        arrive_np = np.zeros([NUM_PROCESSES, 1])                                    # Arrive 여부의 배열
+        done_info_np = np.zeros([NUM_PROCESSES, 3])                                    # Arrive 여부의 배열
         arrive_time = []                                                            # Arrive time 의 저장 버퍼
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         each_step = np.zeros(NUM_PROCESSES)                                         # 각 env 의 step record
+        obs_replay_buffer = np.zeros([NUM_PROCESSES, 12000, 12])
+        obs_step = np.zeros([NUM_PROCESSES, 12])
         episode = 0
+
         # 초기 state...
         obs = [envs[i].reset(p) for i in range(NUM_PROCESSES)]
         obs = np.array(obs)
@@ -239,20 +245,22 @@ class Environment:
                 with torch.no_grad():
                     action = actor_critic.act(rollouts.observations[step])
                 # (16,1)→(16,) -> tensor를 NumPy변수로
-                actions = action.squeeze(1).numpy()
+                actions = action.squeeze(1).cpu().numpy()
 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i], arrive_np[i], distance_np[i]\
+                    obs_np[i], reward_np[i], done_np[i], done_info_np[i]\
                        = envs[i].step(actions[i], each_step[i])
+
+                    # state 의 저장 -> replay 위함
+                    obs_step[i] = obs_np[i]
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
                         print(f'{episode} set, {i} slot: {(each_step[i] + 1)/100} [s]')
                         episode += 1
-                        if arrive_np[i]:    # done with arrival
-                            reward_np[i] = 20
-                            print('arrived!')
+                        if done_info_np[i,0]:    # done with arrival
+                            reward_np[i] = 30
                             #if len(arrive_time) == 0:   # First arrival
                             #    reward_np[i] = 20.0
                             #    arrive_time.append(each_step[i] / 100)
@@ -263,11 +271,12 @@ class Environment:
                             #            reward_np[i] = 20.0
                             #        else:                           # poor or same performace to last success (probably not needed because of gamma)
                             #            reward_np[i] = 0.0
+                        elif done_info_np[i,1]:
+                            reward_np[i] = 20
+                        elif done_info_np[i,2]:
+                            reward_np[i] = 10
                         else:
-                            if distance_np[i] <= 10:
-                                reward_np[i] = 0.1
-                            else:
-                                reward_np[i] = -10.0
+                            reward_np[i] = -10
                         each_step[i] = 0.0            # step 초기화
                         obs_np[i] = envs[i].reset(p) # 환경 초기화
                     else:                           # 무너지거나 성공도 아님
@@ -280,6 +289,9 @@ class Environment:
 
                 # 각 실행 환경을 확인하여 done이 true이면 mask를 0으로, false이면 mask를 1로
                 masks = torch.FloatTensor([[0.0] if done_i else [1.0] for done_i in done_np])
+                masks_arrive = torch.FloatTensor(
+                    [[0.0] if arrive_i else [1.0] for arrive_i in done_info_np[:,0]]
+                    )
 
                 # 마지막 에피소드의 총 보상을 업데이트
                 final_rewards *= masks      # done이 false이면 1을 곱하고, true이면 0을 곱해 초기화
@@ -298,6 +310,14 @@ class Environment:
 
                 # 메모리 객체에 현 단계의 transition을 저장
                 rollouts.insert(current_obs, action.data, reward, masks)
+
+                # state record 의 저장 및 초기화
+                for i in range(NUM_PROCESSES):
+                    if (1-masks[i]):
+                        if (masks_arrive[i]):
+                            obs_replay_buffer[i] = 0
+                    else:
+                        obs_replay_buffer[i,int(each_step[i])] = obs_step[i]
 
             # advanced 학습 for문 끝
 
@@ -318,18 +338,129 @@ class Environment:
             # 모든 환경이 성공(도착)
             if final_rewards.sum().numpy() >= NUM_PROCESSES*20:
                 print('모든 환경 성공')
+                savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
+                torch.save(actor_critic.state_dict(), savepath)
+
+                return obs_replay_buffer
                 break
+            
+        print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
+        return obs_replay_buffer
 
+class AnimationPlot(animation.TimedAnimation):
+    def __init__(self, data):
+        self.data = data
+        self.t = np.arange(0,120,0.01)
 
+        fig1 = plt.figure(num = 1, figsize=plt.figaspect(0.5))
+        for i in range(NUM_PROCESSES):
+            ax = fig1.add_subplot(4, 8, i+1, projection='3d')
+
+            self.x = self.data[i,:,9]
+            self.y = self.data[i,:,10]
+            self.z = self.data[i,:,11]
+
+            ax.set_xlabel('X axis[m]')
+            ax.set_ylabel('Y axis[m]')
+            ax.set_zlabel('Z axis[m]')
+            plt.legend(['Trajectory'])
+            plt.grid()
+
+            self.line1 = Line3D([],[],[])
+            ax.add_line(self.line1)
+            #ax.set_xlim3d(-600,600)
+            #ax.set_ylim3d(-600,600)
+            #ax.set_zlim3d(0,1000)
+
+            animation.TimedAnimation.__init__(self, fig1, interval=50, blit=True)
+
+    def _draw_frame(self, framedata):
+        i = framedata
+        head = i - 1
+        head_slice = (self.t > self.t[i] - 1.0) & (self.t < self.t[i])
+
+        self.line1.set_data(self.x[:i], self.y[:i])
+        self.line1a.set_data(self.x[head_slice], self.y[head_slice])
+        self.line1e.set_data(self.x[head], self.y[head])
+
+        self.line2.set_data(self.y[:i], self.z[:i])
+        self.line2a.set_data(self.y[head_slice], self.z[head_slice])
+        self.line2e.set_data(self.y[head], self.z[head])
+
+        self.line3.set_data(self.x[:i], self.z[:i])
+        self.line3a.set_data(self.x[head_slice], self.z[head_slice])
+        self.line3e.set_data(self.x[head], self.z[head])
+
+        self._drawn_artists = [self.line1, self.line1a, self.line1e,
+                               self.line2, self.line2a, self.line2e,
+                               self.line3, self.line3a, self.line3e]
 # In[8]:
 
 
 if __name__ == '__main__':
-    cartpole_env = Environment()
-    cartpole_env.run()
+    quadrotor_env = Environment()
+    data = quadrotor_env.run()
+    np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
 
+    t = np.arange(0,120,0.01)
 
-# In[ ]:
+    fig1 = plt.figure(num = 1, figsize=plt.figaspect(0.5))
+    for i in range(NUM_PROCESSES):
+        ax = fig1.add_subplot(4, 8, i+1, projection='3d')
+        #ax.set_xlim3d(-600,600)
+        #ax.set_ylim3d(-600,600)
+        #ax.set_zlim3d(0,1000)
+        plt.plot(data[i,:,9],
+                 data[i,:,10],
+                 data[i,:,11])
+        plt.title(f'3D Trajectory {i} slot')
+        plt.xlabel('X axis[m]')
+        plt.ylabel('Y axis[m]')
+        plt.legend(['Trajectory'])
+        plt.grid()
+
+    fig2 = plt.figure(num = 2, figsize=plt.figaspect(0.5))
+    for i in range(NUM_PROCESSES):
+        ax = fig2.add_subplot(4, 8, i+1)
+        plt.plot(data[i,:,9],
+                  data[i,:,10])
+        plt.title('x-y Postition')
+        plt.xlabel('X axis [m]')
+        plt.ylabel('Y axis [m]')
+        plt.grid()
+    
+    fig3 = plt.figure(num = 3, figsize=plt.figaspect(0.5))
+    for i in range(NUM_PROCESSES):
+        ax = fig3.add_subplot(4, 8, i+1)
+        plt.plot(t,data[i,:,11])
+        plt.title('Height')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Height [m]')
+        plt.grid()
+    
+    fig4 = plt.figure(num = 4, figsize=plt.figaspect(0.5))
+    for i in range(NUM_PROCESSES):
+        ax = fig4.add_subplot(4, 8, i+1)
+        plt.plot(t,data[i,:,6]*180/np.pi,
+                 t,data[i,:,7]*180/np.pi,
+                 t,data[i,:,8]*180/np.pi)
+        plt.title('Angle')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Angle [deg]')
+        plt.legend(['x(phi)','y(theta)','z(psi)'])
+        plt.grid()
+    
+    fig5 = plt.figure(num = 5, figsize=plt.figaspect(0.5))
+    for i in range(NUM_PROCESSES):
+        ax = fig5.add_subplot(4, 8, i+1)
+        plt.plot(t, data[i,:,0]*180/np.pi,
+                 t, data[i,:,1]*180/np.pi,
+                 t, data[i,:,2]*180/np.pi)
+        plt.title('Angular Velocity(body)')
+        plt.xlabel('Time [s]')
+        plt.ylabel('Angular Velocity(body) [deg/s]')
+        plt.legend(['x(phi)','y(theta)','z(psi)'])
+        plt.grid()
 
 
 
