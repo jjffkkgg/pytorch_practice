@@ -336,7 +336,7 @@ class Environment:
             rollouts.after_update()
 
             # 모든 환경이 성공(도착)
-            if final_rewards.sum().numpy() >= NUM_PROCESSES*20:
+            if final_rewards.sum().numpy() >= NUM_PROCESSES*30:
                 print('모든 환경 성공')
                 savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
                 torch.save(actor_critic.state_dict(), savepath)
@@ -347,53 +347,6 @@ class Environment:
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
         return obs_replay_buffer
 
-class AnimationPlot(animation.TimedAnimation):
-    def __init__(self, data):
-        self.data = data
-        self.t = np.arange(0,120,0.01)
-
-        fig1 = plt.figure(num = 1, figsize=plt.figaspect(0.5))
-        for i in range(NUM_PROCESSES):
-            ax = fig1.add_subplot(4, 8, i+1, projection='3d')
-
-            self.x = self.data[i,:,9]
-            self.y = self.data[i,:,10]
-            self.z = self.data[i,:,11]
-
-            ax.set_xlabel('X axis[m]')
-            ax.set_ylabel('Y axis[m]')
-            ax.set_zlabel('Z axis[m]')
-            plt.legend(['Trajectory'])
-            plt.grid()
-
-            self.line1 = Line3D([],[],[])
-            ax.add_line(self.line1)
-            #ax.set_xlim3d(-600,600)
-            #ax.set_ylim3d(-600,600)
-            #ax.set_zlim3d(0,1000)
-
-            animation.TimedAnimation.__init__(self, fig1, interval=50, blit=True)
-
-    def _draw_frame(self, framedata):
-        i = framedata
-        head = i - 1
-        head_slice = (self.t > self.t[i] - 1.0) & (self.t < self.t[i])
-
-        self.line1.set_data(self.x[:i], self.y[:i])
-        self.line1a.set_data(self.x[head_slice], self.y[head_slice])
-        self.line1e.set_data(self.x[head], self.y[head])
-
-        self.line2.set_data(self.y[:i], self.z[:i])
-        self.line2a.set_data(self.y[head_slice], self.z[head_slice])
-        self.line2e.set_data(self.y[head], self.z[head])
-
-        self.line3.set_data(self.x[:i], self.z[:i])
-        self.line3a.set_data(self.x[head_slice], self.z[head_slice])
-        self.line3e.set_data(self.x[head], self.z[head])
-
-        self._drawn_artists = [self.line1, self.line1a, self.line1e,
-                               self.line2, self.line2a, self.line2e,
-                               self.line3, self.line3a, self.line3e]
 # In[8]:
 
 
@@ -404,64 +357,76 @@ if __name__ == '__main__':
 
     t = np.arange(0,120,0.01)
 
-    fig1 = plt.figure(num = 1, figsize=plt.figaspect(0.5))
-    for i in range(NUM_PROCESSES):
-        ax = fig1.add_subplot(4, 8, i+1, projection='3d')
-        #ax.set_xlim3d(-600,600)
-        #ax.set_ylim3d(-600,600)
-        #ax.set_zlim3d(0,1000)
-        plt.plot(data[i,:,9],
-                 data[i,:,10],
-                 data[i,:,11])
-        plt.title(f'3D Trajectory {i} slot')
-        plt.xlabel('X axis[m]')
-        plt.ylabel('Y axis[m]')
-        plt.legend(['Trajectory'])
-        plt.grid()
+    def update_lines(num, data, line):
+        # NOTE: there is no .set_data() for 3 dim data...
+        line.set_data(data[0:2, :num])
+        line.set_3d_properties(data[2, :num])
+        return line
 
-    fig2 = plt.figure(num = 2, figsize=plt.figaspect(0.5))
-    for i in range(NUM_PROCESSES):
-        ax = fig2.add_subplot(4, 8, i+1)
-        plt.plot(data[i,:,9],
-                  data[i,:,10])
-        plt.title('x-y Postition')
-        plt.xlabel('X axis [m]')
-        plt.ylabel('Y axis [m]')
-        plt.grid()
+    # Attaching 3D axis to the figure
+    fig1 = plt.figure(num = 1, figsize=(plt.figaspect(1)))
+    ax = Axes3D(fig1)
+
+    x = data[0,:,9]
+    y = data[0,:,10]
+    z = data[0,:,11]
+    data_plot = np.array([x,y,z])
     
-    fig3 = plt.figure(num = 3, figsize=plt.figaspect(0.5))
-    for i in range(NUM_PROCESSES):
-        ax = fig3.add_subplot(4, 8, i+1)
-        plt.plot(t,data[i,:,11])
-        plt.title('Height')
-        plt.xlabel('Time [s]')
-        plt.ylabel('Height [m]')
-        plt.grid()
+    line = ax.plot(x, y, z)[0]
+
+    # Setting the axes properties
+    # ax.set_xlim3d([-50, 50])
+    # ax.set_ylim3d([-50, 50])
+    # ax.set_zlim3d([0, 50])
+
+    ax.set_ylabel('Y')
+    ax.set_xlabel('X')
+    ax.set_zlabel('Z')
+
+    ax.set_title('Trajectory')
+
+    # Creating the Animation object
+    line_ani = animation.FuncAnimation(fig1, update_lines, 25, fargs=(data_plot, line),
+                                    interval=50, blit=False)
+    line_ani.save('./test_system/quadrotor/trained_net/flight.gif', writer='pillow', fps=60)
+    plt.show()
+
     
-    fig4 = plt.figure(num = 4, figsize=plt.figaspect(0.5))
-    for i in range(NUM_PROCESSES):
-        ax = fig4.add_subplot(4, 8, i+1)
-        plt.plot(t,data[i,:,6]*180/np.pi,
-                 t,data[i,:,7]*180/np.pi,
-                 t,data[i,:,8]*180/np.pi)
-        plt.title('Angle')
-        plt.xlabel('Time [s]')
-        plt.ylabel('Angle [deg]')
-        plt.legend(['x(phi)','y(theta)','z(psi)'])
-        plt.grid()
+    fig2 = plt.figure(num = 1, figsize=(16,9))
+    ax1 = fig2.add_subplot(2, 2, 1)
+    plt.plot(data[0,:,9],
+                data[0,:,10])
+    plt.title('x-y Postition')
+    plt.xlabel('X axis [m]')
+    plt.ylabel('Y axis [m]')
+    plt.grid()
     
-    fig5 = plt.figure(num = 5, figsize=plt.figaspect(0.5))
-    for i in range(NUM_PROCESSES):
-        ax = fig5.add_subplot(4, 8, i+1)
-        plt.plot(t, data[i,:,0]*180/np.pi,
-                 t, data[i,:,1]*180/np.pi,
-                 t, data[i,:,2]*180/np.pi)
-        plt.title('Angular Velocity(body)')
-        plt.xlabel('Time [s]')
-        plt.ylabel('Angular Velocity(body) [deg/s]')
-        plt.legend(['x(phi)','y(theta)','z(psi)'])
-        plt.grid()
+    ax2 = fig2.add_subplot(2, 2, 2)
+    plt.plot(t,data[0,:,11])
+    plt.title('Height')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Height [m]')
+    plt.grid()
 
+    ax3 = fig2.add_subplot(2, 2, 3)
+    plt.plot(t,data[0,:,6]*180/np.pi,
+                t,data[0,:,7]*180/np.pi,
+                t,data[0,:,8]*180/np.pi)
+    plt.title('Angle')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Angle [deg]')
+    plt.legend(['x(phi)','y(theta)','z(psi)'])
+    plt.grid()
 
+    ax4 = fig2.add_subplot(2, 2, 4)
+    plt.plot(t, data[0,:,0]*180/np.pi,
+                t, data[0,:,1]*180/np.pi,
+                t, data[0,:,2]*180/np.pi)
+    plt.title('Angular Velocity(body)')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Angular Velocity(body) [deg/s]')
+    plt.legend(['x(phi)','y(theta)','z(psi)'])
+    plt.grid()
 
-
+    plt.savefig('./test_system/quadrotor/trained_net/flight_data.png')
+    plt.show()

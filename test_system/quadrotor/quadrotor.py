@@ -31,7 +31,7 @@ class QuadRotorEnv:
             ]
 
         # start - end
-        self.endpoint = np.array([0, 0, 10])   # [m]
+        self.endpoint = np.array([0, 0, 0.5])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -168,7 +168,7 @@ class QuadRotorEnv:
             print('crashed to obstacle')
         
         # arrival cases
-        if distance <= 0.1:
+        if distance <= 0.05:
             if np.linalg.norm(self.xi[3:6]) <= 0.05:
                 if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
                     print('arrived!')
@@ -205,7 +205,7 @@ class QuadRotorEnv:
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.array([0.0,0.0,0.0,3.0])
+        self.u = np.array([0.0,0.0,0.0,0.0])
         self.t = 0
         self.radius = 2 * self.p[1]
 
