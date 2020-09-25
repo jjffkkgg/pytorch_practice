@@ -38,8 +38,8 @@ class QuadRotorEnv:
         self.action_space_size = 8          # size of action space
 
         # defining test space
-        self.test_space = Obstacle(lim)
-        self.test_space.rand_wall_sq(self.endpoint, num=50)
+        #self.test_space = Obstacle(lim)
+        #self.test_space.rand_wall_sq(self.endpoint, num=50)
 
         # state (x)
         x = ca.SX.sym(
@@ -163,9 +163,9 @@ class QuadRotorEnv:
             print('crashed to ground')
 
         # done by obstacle crash
-        if self.test_space.is_collide(self.xi[9:12], self.radius):
-            done = True
-            print('crashed to obstacle')
+        #if self.test_space.is_collide(self.xi[9:12], self.radius):
+        #    done = True
+        #    print('crashed to obstacle')
         
         # arrival cases
         if distance <= 0.05:
