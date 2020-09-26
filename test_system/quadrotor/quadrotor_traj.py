@@ -16,10 +16,10 @@ class QuadRotorEnv:
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
         # control input per step(0.01s)
-        self.action_roll = 0.0001               # [V]
-        self.action_pitch = 0.0001
-        self.action_yaw = 0.001
-        self.action_thrust = 0.2
+        self.action_roll = 0.001               # [V]
+        self.action_pitch = 0.001
+        self.action_yaw = 0.05
+        self.action_thrust = 0.1
         self.steps_beyond_done = None
 
         # state limit of system
@@ -31,7 +31,7 @@ class QuadRotorEnv:
             ]
 
         # start - end
-        self.endpoint = np.array([0, 0, 20])   # [m]
+        self.endpoint = np.array([10, 10, 20])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -39,7 +39,7 @@ class QuadRotorEnv:
 
         # defining test space
         self.test_space = Obstacle(lim)
-        self.test_space.rand_wall_sq(self.endpoint, num=50)
+        self.test_space.rand_wall_sq(self.endpoint, num=1)
 
         # state (x)
         x = ca.SX.sym(
@@ -167,16 +167,19 @@ class QuadRotorEnv:
             print('crashed to obstacle')
         
         # arrival cases
-        if step >= (self.time + self.arr_hover_t) * 100:
-            if distance <= 0.1 and np.linalg.norm(self.xi[3:6]) <= 0.05:
-                if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
-                    print('arrived!')
-                    arrive = True
-                    done = True
+        if step >= (self.time + 0.5*self.arr_hover_t) * 100:
+            if distance <= 0.1:
+                if np.linalg.norm(self.xi[3:6]) <= 0.05:
+                    if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
+                        print('arrived!')
+                        arrive = True
+                        done = True
+                    else:
+                        print('hover with turning')
+                        arrive_turn = True
+                        done = True
                 else:
-                    print('hover with turning')
-                    arrive_turn = True
-                    done = True
+                    print('arrive but not hover')
         
         # exception management
         if not done:

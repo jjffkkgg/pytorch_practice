@@ -32,13 +32,13 @@ print(device)
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
 MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
-NUM_EPISODES = 10000         # 최대 에피소드 수
+NUM_EPISODES = 10         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 10       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 1000       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
-ENTROPY_COEFF = 0.01        # Local min 에서 벗어나기 위한 엔트로피 상수
+ENTROPY_COEFF = 0.05        # Local min 에서 벗어나기 위한 엔트로피 상수
 MAX_GRAD_NORM = 0.5
 
 
