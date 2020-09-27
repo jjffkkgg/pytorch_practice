@@ -16,9 +16,9 @@ class QuadRotorEnv:
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
         # control input per step(0.01s)
-        self.action_roll = 0.001               # [V]
-        self.action_pitch = 0.001
-        self.action_yaw = 0.05
+        self.action_roll = 0.0005               # [V]
+        self.action_pitch = 0.0005
+        self.action_yaw = 0.01
         self.action_thrust = 0.1
         self.steps_beyond_done = None
 
@@ -26,20 +26,20 @@ class QuadRotorEnv:
         self.done_threshold = [
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             30,30,30,                       # [m/s]
-            ca.pi/4, ca.pi/4, 4*ca.pi,      # [rad]
+            ca.pi/3, ca.pi/3, 4*ca.pi,      # [rad]
             lim[0],lim[1],lim[2]                    # [m]
             ]
 
         # start - end
-        self.endpoint = np.array([10, 10, 20])   # [m]
+        self.endpoint = np.array([0, 0, 100])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
         self.action_space_size = 8          # size of action space
 
         # defining test space
-        self.test_space = Obstacle(lim)
-        self.test_space.rand_wall_sq(self.endpoint, num=1)
+        # self.test_space = Obstacle(lim)
+        # self.test_space.rand_wall_sq(self.endpoint, num=1)
 
         # state (x)
         x = ca.SX.sym(
@@ -147,7 +147,22 @@ class QuadRotorEnv:
         self.t += dt
 
         # calculate distance to endpoint
-        distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step])
+        distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step + 1])
+        
+        # done by ground crash
+        if self.xi[11] <= 0 and step >= 100:
+            done = True
+            print('crashed to ground')
+        
+        # done by off trajectory
+        if distance >= 5:
+            print('5m apart from trajectory')
+            done = True
+            
+        # done by obstacle crash
+        # if self.test_space.is_collide(self.xi[9:12], self.radius):
+        #     done = True
+        #     print('crashed to obstacle')
 
         # done by exceeding state limit
         for i in range(len(self.xi)):
@@ -155,16 +170,6 @@ class QuadRotorEnv:
                 self.xi[i] <= -self.done_threshold[i]:
                 done = True
                 print('over the limit!')
-
-        # done by ground crash
-        if self.xi[11] <= 0 and step >= 100:
-            done = True
-            print('crashed to ground')
-
-        # done by obstacle crash
-        if self.test_space.is_collide(self.xi[9:12], self.radius):
-            done = True
-            print('crashed to obstacle')
         
         # arrival cases
         if step >= (self.time + 0.5*self.arr_hover_t) * 100:
@@ -209,7 +214,7 @@ class QuadRotorEnv:
         self.time = arrive_time
         self.arr_hover_t = 2
         self.trajectory = np.linspace(self.xi[9:12], self.endpoint, self.time*100)
-        for i in range(self.arr_hover_t * 100):
+        for _ in range(self.arr_hover_t * 100):
             self.trajectory = np.vstack((self.trajectory, self.endpoint))
 
         return self.xi

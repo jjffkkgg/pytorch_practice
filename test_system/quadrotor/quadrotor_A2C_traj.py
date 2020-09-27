@@ -31,11 +31,11 @@ print(device)
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
-NUM_EPISODES = 10         # 최대 에피소드 수
+# MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
+NUM_EPISODES = 1000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 1000       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.05        # Local min 에서 벗어나기 위한 엔트로피 상수
@@ -135,7 +135,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.01)    # learning rate = 0.01 (faster)
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.01)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -185,7 +185,7 @@ class Brain(object):
 
 
 class Environment:
-    def run(self) -> None:
+    def run(self, arrive_time) -> None:
         '''running entry point'''
         # 동시 실행할 환경 수 만큼 env를 생성
         space_lim = [500, 500, 500]
@@ -200,7 +200,7 @@ class Environment:
 
         # 각종 정보를 저장하는 변수
         l_arm = 0.3                             # length or the rotor arm [m]
-        m = 1.3                                 # mass of vehicle [kg]
+        m = 1.3                                # mass of vehicle [kg]
         rho = 1.225                             # density of air [kg/m^3]
         r = 0.1                                 # radius of propeller
         V = 11.1                                # voltage of battery [V]
@@ -219,6 +219,7 @@ class Environment:
         final_rewards = torch.zeros(NUM_PROCESSES, 1)                               # 마지막 episode 의 reward
         obs_np = np.zeros([NUM_PROCESSES, obs_shape])                               # state 배열
         reward_np = np.zeros([NUM_PROCESSES, 1])                                    # 보상의 배열
+        reward_past_32 = np.zeros(32)
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                    # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
@@ -226,7 +227,6 @@ class Environment:
         obs_replay_buffer = np.zeros([NUM_PROCESSES, 12000, 12])
         obs_step = np.zeros([NUM_PROCESSES, 12])
         episode = 0
-        arrive_time = 20
 
         # 초기 state...
         obs = [envs[i].reset(p, arrive_time) for i in range(NUM_PROCESSES)]
@@ -257,18 +257,22 @@ class Environment:
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
-                        print(f'{episode} set, {i} slot: {(each_step[i] + 1)/100} [s]')
+                        print(f'{episode+1} set, {i+1} slot: {(each_step[i] + 1)/100} [s]')
                         episode += 1
                         if done_info_np[i,0]:    # done with arrival
-                            reward_np[i] = 1000
+                            reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
-                            reward_np[i] = 500
+                            reward_np[i] = 5000.0
                         else:
-                            reward_np[i] = -1000
-                        each_step[i] = 0            # step 초기화
+                            reward_np[i] = -(arrive_time + 1) + \
+                                            (each_step[i] + 1)*0.1 + \
+                                            (5 - distance_np[i])
+                        each_step[i] = 0                          # step 초기화
                         obs_np[i] = envs[i].reset(p, arrive_time) # 환경 초기화
+                        reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
+                        print(f'reward: {reward_np[i]}, mean: {reward_past_32.mean()}') 
                     else:                           # 무너지거나 성공도 아님
-                        reward_np[i] = 1 - distance_np[i]
+                        reward_np[i] = 0
                         each_step[i] += 1           # 그대로 진행
 
                 # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
@@ -330,7 +334,6 @@ class Environment:
                 torch.save(actor_critic.state_dict(), savepath)
 
                 return obs_replay_buffer
-                break
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
         return obs_replay_buffer
@@ -339,11 +342,12 @@ class Environment:
 
 
 if __name__ == '__main__':
+    arrive_time = 10
     quadrotor_env = Environment()
-    data = quadrotor_env.run()
+    data = quadrotor_env.run(arrive_time)
     np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
 
-    t = np.arange(0,120,0.01)
+    t = np.arange(0,arrive_time,0.01)
 
     def update_lines(num, data, line):
         # NOTE: there is no .set_data() for 3 dim data...
