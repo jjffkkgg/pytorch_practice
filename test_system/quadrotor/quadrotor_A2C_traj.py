@@ -32,7 +32,7 @@ print(device)
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
 # MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
-NUM_EPISODES = 1000         # 최대 에피소드 수
+NUM_EPISODES = 2000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -135,7 +135,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.01)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.001)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -200,7 +200,7 @@ class Environment:
 
         # 각종 정보를 저장하는 변수
         l_arm = 0.3                             # length or the rotor arm [m]
-        m = 1.3                                # mass of vehicle [kg]
+        m = 0.8                                # mass of vehicle [kg]
         rho = 1.225                             # density of air [kg/m^3]
         r = 0.1                                 # radius of propeller
         V = 11.1                                # voltage of battery [V]
@@ -219,13 +219,15 @@ class Environment:
         final_rewards = torch.zeros(NUM_PROCESSES, 1)                               # 마지막 episode 의 reward
         obs_np = np.zeros([NUM_PROCESSES, obs_shape])                               # state 배열
         reward_np = np.zeros([NUM_PROCESSES, 1])                                    # 보상의 배열
-        reward_past_32 = np.zeros(32)
+        reward_past_32 = np.zeros(32)                                               # 32개 보상의 평균
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                    # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
-        obs_replay_buffer = np.zeros([NUM_PROCESSES, 12000, 12])
+        obs_replay_buffer = np.zeros([NUM_PROCESSES, arrive_time*100, 12])          # state 저장 버퍼
+        distance_replay_buffer = np.zeros([NUM_PROCESSES, arrive_time*100])         # 거리 저장 버퍼
         obs_step = np.zeros([NUM_PROCESSES, 12])
+        distance_step = np.zeros([NUM_PROCESSES, 1])
         episode = 0
 
         # 초기 state...
@@ -238,7 +240,7 @@ class Environment:
         rollouts.observations[0].copy_(current_obs)
 
         # 에피소드 반복문
-        for episode in range(NUM_PROCESSES * NUM_EPISODES):
+        for episode in range(NUM_EPISODES):
             # advanced 학습(action actor) 대상이 되는 각 단계에 대해 계산 (step 반복)
             for step in range(NUM_ADVANCED_STEP):
                 # action 을 fetch
@@ -252,8 +254,9 @@ class Environment:
                     obs_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
-                    # state 의 저장 -> replay 위함
+                    # state & distance 의 저장 -> replay 위함
                     obs_step[i] = obs_np[i]
+                    distance_step[i] = distance_np[i]
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
@@ -263,14 +266,16 @@ class Environment:
                             reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
+                        # elif each_step[i] <= 110:
+                        #     reward_np[i] = -50000000000000
                         else:
                             reward_np[i] = -(arrive_time + 1) + \
                                             (each_step[i] + 1)*0.1 + \
-                                            (5 - distance_np[i])
+                                            -(distance_np[i])
                         each_step[i] = 0                          # step 초기화
                         obs_np[i] = envs[i].reset(p, arrive_time) # 환경 초기화
                         reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
-                        print(f'reward: {reward_np[i]}, mean: {reward_past_32.mean()}') 
+                        print(f'reward: {reward_np[i]}, distance: {distance_np[i]} mean: {reward_past_32.mean()}') 
                     else:                           # 무너지거나 성공도 아님
                         reward_np[i] = 0
                         each_step[i] += 1           # 그대로 진행
@@ -308,8 +313,10 @@ class Environment:
                     if (1-masks[i]):
                         if (masks_arrive[i]):
                             obs_replay_buffer[i] = 0
+                            distance_replay_buffer[i] = 0
                     else:
                         obs_replay_buffer[i,int(each_step[i])] = obs_step[i]
+                        distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
 
             # advanced 학습 for문 끝
 
@@ -333,10 +340,10 @@ class Environment:
                 savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
                 torch.save(actor_critic.state_dict(), savepath)
 
-                return obs_replay_buffer
+                return obs_replay_buffer, distance_replay_buffer
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
-        return obs_replay_buffer
+        return obs_replay_buffer, distance_replay_buffer
 
 # In[8]:
 
@@ -344,9 +351,10 @@ class Environment:
 if __name__ == '__main__':
     arrive_time = 10
     quadrotor_env = Environment()
-    data = quadrotor_env.run(arrive_time)
+    data, distance = quadrotor_env.run(arrive_time)
     np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
-
+    np.save('./test_system/quadrotor/trained_net/distance_data.npy', distance)
+    
     t = np.arange(0,arrive_time,0.01)
 
     def update_lines(num, data, line):
@@ -367,9 +375,9 @@ if __name__ == '__main__':
     line = ax.plot(x, y, z)[0]
 
     # Setting the axes properties
-    # ax.set_xlim3d([-50, 50])
-    # ax.set_ylim3d([-50, 50])
-    # ax.set_zlim3d([0, 50])
+    ax.set_xlim3d([-50, 50])
+    ax.set_ylim3d([-50, 50])
+    ax.set_zlim3d([0, 100])
 
     ax.set_ylabel('Y')
     ax.set_xlabel('X')
@@ -381,26 +389,27 @@ if __name__ == '__main__':
     line_ani = animation.FuncAnimation(fig1, update_lines, 25, fargs=(data_plot, line),
                                     interval=50, blit=False)
     line_ani.save('./test_system/quadrotor/trained_net/flight.gif', writer='pillow', fps=60)
-    plt.show()
 
     
-    fig2 = plt.figure(num = 1, figsize=(16,9))
-    ax1 = fig2.add_subplot(2, 2, 1)
+    fig2 = plt.figure(num = 2, figsize=(16,9))
+    ax1 = fig2.add_subplot(2, 3, 1)
     plt.plot(data[0,:,9],
                 data[0,:,10])
+    plt.xlim(-10,10)
+    plt.ylim(-10,10)
     plt.title('x-y Postition')
     plt.xlabel('X axis [m]')
     plt.ylabel('Y axis [m]')
     plt.grid()
     
-    ax2 = fig2.add_subplot(2, 2, 2)
+    ax2 = fig2.add_subplot(2, 3, 2)
     plt.plot(t,data[0,:,11])
     plt.title('Height')
     plt.xlabel('Time [s]')
     plt.ylabel('Height [m]')
     plt.grid()
 
-    ax3 = fig2.add_subplot(2, 2, 3)
+    ax3 = fig2.add_subplot(2, 3, 3)
     plt.plot(t,data[0,:,6]*180/np.pi,
                 t,data[0,:,7]*180/np.pi,
                 t,data[0,:,8]*180/np.pi)
@@ -410,7 +419,7 @@ if __name__ == '__main__':
     plt.legend(['x(phi)','y(theta)','z(psi)'])
     plt.grid()
 
-    ax4 = fig2.add_subplot(2, 2, 4)
+    ax4 = fig2.add_subplot(2, 3, 4)
     plt.plot(t, data[0,:,0]*180/np.pi,
                 t, data[0,:,1]*180/np.pi,
                 t, data[0,:,2]*180/np.pi)
@@ -419,6 +428,16 @@ if __name__ == '__main__':
     plt.ylabel('Angular Velocity(body) [deg/s]')
     plt.legend(['x(phi)','y(theta)','z(psi)'])
     plt.grid()
+    
+    ax3 = fig2.add_subplot(2, 3, 5)
+    plt.plot(t,distance[0,:])
+    plt.title('Distance off from guided trajectory')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Distance [m]')
+    plt.grid()
 
-    plt.savefig('./test_system/quadrotor/trained_net/flight_data.png')
+    fig2.savefig('./test_system/quadrotor/trained_net/flight_data.png')
+    
     plt.show()
+
+# %%

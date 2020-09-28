@@ -16,22 +16,22 @@ class QuadRotorEnv:
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
         # control input per step(0.01s)
-        self.action_roll = 0.0005               # [V]
-        self.action_pitch = 0.0005
+        self.action_roll = 0.001               # [V]
+        self.action_pitch = 0.001
         self.action_yaw = 0.01
-        self.action_thrust = 0.1
+        self.action_thrust = 0.01
         self.steps_beyond_done = None
 
         # state limit of system
         self.done_threshold = [
             ca.pi/2, ca.pi/2, ca.pi,        # [rad/s]
             30,30,30,                       # [m/s]
-            ca.pi/3, ca.pi/3, 4*ca.pi,      # [rad]
+            5*ca.pi/18, 5*ca.pi/18, 4*ca.pi,      # [rad]
             lim[0],lim[1],lim[2]                    # [m]
             ]
 
         # start - end
-        self.endpoint = np.array([0, 0, 100])   # [m]
+        self.endpoint = np.array([10, 10, 10])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -150,13 +150,13 @@ class QuadRotorEnv:
         distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step + 1])
         
         # done by ground crash
-        if self.xi[11] <= 0 and step >= 100:
+        if self.xi[11] <= 0 and step >= 20:
             done = True
-            print('crashed to ground')
+            print('------crashed to ground------')
         
         # done by off trajectory
-        if distance >= 5:
-            print('5m apart from trajectory')
+        if distance >= 2:
+            print('------2m apart from trajectory------')
             done = True
             
         # done by obstacle crash
@@ -165,26 +165,26 @@ class QuadRotorEnv:
         #     print('crashed to obstacle')
 
         # done by exceeding state limit
-        for i in range(len(self.xi)):
-            if self.xi[i] >= self.done_threshold[i] or\
-                self.xi[i] <= -self.done_threshold[i]:
-                done = True
-                print('over the limit!')
+        # for i in range(len(self.xi)):
+        #     if self.xi[i] >= self.done_threshold[i] or\
+        #         self.xi[i] <= -self.done_threshold[i]:
+        #         done = True
+        #         print('------over the limit!------')
         
         # arrival cases
         if step >= (self.time + 0.5*self.arr_hover_t) * 100:
             if distance <= 0.1:
                 if np.linalg.norm(self.xi[3:6]) <= 0.05:
                     if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
-                        print('arrived!')
+                        print('------arrived!------')
                         arrive = True
                         done = True
                     else:
-                        print('hover with turning')
+                        print('------hover with turning------')
                         arrive_turn = True
                         done = True
                 else:
-                    print('arrive but not hover')
+                    print('------arrive but not hover------')
         
         # exception management
         if not done:
@@ -208,7 +208,7 @@ class QuadRotorEnv:
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.array([0.0,0.0,0.0,3.0])
+        self.u = np.array([0.0,0.0,0.0,2.24])
         self.t = 0
         self.radius = 2 * self.p[1]
         self.time = arrive_time
