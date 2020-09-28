@@ -21,6 +21,7 @@ from quadrotor_traj import QuadRotorEnv
 
 
 # In[2]:
+'''define device'''
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 print(device)
@@ -32,7 +33,7 @@ print(device)
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
 # MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
-NUM_EPISODES = 2000         # 최대 에피소드 수
+NUM_EPISODES = 100         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -266,17 +267,17 @@ class Environment:
                             reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
-                        # elif each_step[i] <= 110:
-                        #     reward_np[i] = -50000000000000
+                        elif each_step[i] <= 20:
+                            reward_np[i] = -50
                         else:
                             reward_np[i] = -(arrive_time + 1) + \
                                             (each_step[i] + 1)*0.1 + \
-                                            -(distance_np[i])
+                                            (2-distance_np[i])*10
                         each_step[i] = 0                          # step 초기화
                         obs_np[i] = envs[i].reset(p, arrive_time) # 환경 초기화
                         reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
                         print(f'reward: {reward_np[i]}, distance: {distance_np[i]} mean: {reward_past_32.mean()}') 
-                    else:                           # 무너지거나 성공도 아님
+                    else:                           # 비행중
                         reward_np[i] = 0
                         each_step[i] += 1           # 그대로 진행
 

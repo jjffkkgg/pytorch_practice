@@ -150,7 +150,7 @@ class QuadRotorEnv:
         distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step + 1])
         
         # done by ground crash
-        if self.xi[11] <= 0 and step >= 20:
+        if self.xi[11] <= 0 and step >= 10:
             done = True
             print('------crashed to ground------')
         

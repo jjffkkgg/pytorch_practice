@@ -8,7 +8,16 @@ This repository is available for use of pytorch with following libraries.
 * Use enviornment.yml to setup a new conda environment.
 
 ```bash
-conda env create -f environment.yml
-conda activate pyt
-jupyter lab
+$ conda env create -f environment.yml
+$ conda activate pyt
+$ jupyter lab
+```
+
+## ROS setup (noetic, Ubuntu 20.04 LTS)
+
+Follow installation guide in ROS neotic.
+
+To setup the catkin, use following command in terminal. (python(3)-catkin-tools not working)
+```
+$ pip3 install --user git+https://github.com/catkin/catkin_tools.git
 ```
