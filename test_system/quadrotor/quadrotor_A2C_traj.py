@@ -3,37 +3,28 @@
 
 # In[1]:
 
-
 from __future__ import annotations
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Line3D
-import matplotlib.animation as animation
-#get_ipython().run_line_magic('matplotlib', 'inline')
-#import gym
 import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
-import copy
 from quadrotor_traj import QuadRotorEnv 
 
 
 # In[2]:
+
 '''define device'''
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 print(device)
 
 
-
 # In[3]:
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-# MAX_STEPS = 2000             # 1에피소드 당 최대 단계 수 (0.01 second per step)
-NUM_EPISODES = 100         # 최대 에피소드 수
+NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -44,7 +35,6 @@ MAX_GRAD_NORM = 0.5
 
 
 # In[4]:
-
 
 class RolloutStorage(object):
     '''Advantage 학습에 사용할 메모리 클래스'''
@@ -85,7 +75,6 @@ class RolloutStorage(object):
 
 
 # In[5]:
-
 
 class Net(nn.Module):
     def __init__(self, n_in: int, n_mid: int, n_out: int) -> None:
@@ -131,7 +120,6 @@ class Net(nn.Module):
 
 
 # In[6]:
-
 
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
@@ -184,9 +172,8 @@ class Brain(object):
 
 # In[7]:
 
-
 class Environment:
-    def run(self, arrive_time) -> None:
+    def run(self, arrive_time: int, hover_time: int) -> None:
         '''running entry point'''
         # 동시 실행할 환경 수 만큼 env를 생성
         space_lim = [500, 500, 500]
@@ -213,6 +200,7 @@ class Environment:
         Jy = 0.021                              # Moment of inertia Iyy [kg*m^2]
         Jz = 0.042                              # Moment of inertia Izz [kg*m^2]
         p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
+        travel_time = arrive_time + hover_time
         obs_shape = n_in
         current_obs = torch.zeros(NUM_PROCESSES, obs_shape).to(device)                         # (16,4) 의 tensor
         rollouts = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES,obs_shape)       # RolloutStorage init
@@ -225,14 +213,14 @@ class Environment:
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                    # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
-        obs_replay_buffer = np.zeros([NUM_PROCESSES, arrive_time*100, 12])          # state 저장 버퍼
-        distance_replay_buffer = np.zeros([NUM_PROCESSES, arrive_time*100])         # 거리 저장 버퍼
+        obs_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100, 12])          # state 저장 버퍼
+        distance_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100])         # 거리 저장 버퍼
         obs_step = np.zeros([NUM_PROCESSES, 12])
         distance_step = np.zeros([NUM_PROCESSES, 1])
         episode = 0
 
         # 초기 state...
-        obs = [envs[i].reset(p, arrive_time) for i in range(NUM_PROCESSES)]
+        obs = [envs[i].reset(p, arrive_time, hover_time) for i in range(NUM_PROCESSES)]
         obs = np.array(obs)
         obs = torch.from_numpy(obs).float()                     # (32,12) 의 tensor
         current_obs = obs                                       # current obs 의 업데이트
@@ -250,74 +238,71 @@ class Environment:
                 # (16,1)→(16,) -> tensor를 NumPy변수로
                 actions = action.squeeze(1).cpu().numpy()
 
+                # done_T-F mask init
+                masks = torch.FloatTensor()
+                masks_arrive = torch.FloatTensor()
+                
                 # process 반복
                 for i in range(NUM_PROCESSES):
                     obs_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
-                    # state & distance 의 저장 -> replay 위함
+                    # state & distance 의 저장 -> reward & replay 위함
                     obs_step[i] = obs_np[i]
                     distance_step[i] = distance_np[i]
+                    obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
+                    distance_replay_buffer[i,int(each_step[i])] = distance_np[i]
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
+                        mask_step = torch.FloatTensor([[1.0]])
                         print(f'{episode+1} set, {i+1} slot: {(each_step[i] + 1)/100} [s]')
-                        episode += 1
                         if done_info_np[i,0]:    # done with arrival
+                            masks_arrive_step= torch.FloatTensor([[1.0]])
                             reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
-                        elif each_step[i] <= 20:
-                            reward_np[i] = -50
+                        elif each_step[i] <= 15:
+                            reward_np[i] = -100
                         else:
-                            reward_np[i] = -(arrive_time + 1) + \
-                                            (each_step[i] + 1)*0.1 + \
-                                            (2-distance_np[i])*10
+                            reward_np[i] = -(distance_replay_buffer[i].sum()*0.01)
+                            obs_replay_buffer[i] = 0
+                            distance_replay_buffer[i] = 0
+                            masks_arrive_step = torch.FloatTensor([[0.0]])
                         each_step[i] = 0                          # step 초기화
-                        obs_np[i] = envs[i].reset(p, arrive_time) # 환경 초기화
+                        obs_np[i] = envs[i].reset(p, arrive_time, hover_time) # 환경 초기화
                         reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
-                        print(f'reward: {reward_np[i]}, distance: {distance_np[i]} mean: {reward_past_32.mean()}') 
+                        print(f'reward: {reward_np[i]}, distance: {distance_np[i]}m, mean32: {round(reward_past_32.mean(),2)},'
+                              f' max32: {round(reward_past_32.max(),2)}, min32: {round(reward_past_32.min(),2)}') 
                     else:                           # 비행중
+                        mask_step = torch.FloatTensor([[0.0]])
+                        masks_arrive_step = torch.FloatTensor([[0.0]])
                         reward_np[i] = 0
                         each_step[i] += 1           # 그대로 진행
+                    masks = torch.cat((masks, mask_step), dim=0)   
+                    masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)             
 
                 # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
                 reward = torch.from_numpy(reward_np).float()
                 episode_rewards += reward
-
-                # 각 실행 환경을 확인하여 done이 true이면 mask를 0으로, false이면 mask를 1로
-                masks = torch.FloatTensor([[0.0] if done_i else [1.0] for done_i in done_np])
-                masks_arrive = torch.FloatTensor(
-                    [[0.0] if arrive_i else [1.0] for arrive_i in done_info_np[:,0]]
-                    )
-
+                
                 # 마지막 에피소드의 총 보상을 업데이트
-                final_rewards *= masks      # done이 false이면 1을 곱하고, true이면 0을 곱해 초기화
+                final_rewards *= (1 - masks)      # done이 false이면 1을 곱하고, true이면 0을 곱해 초기화
                 # done이 false이면 0을 더하고, true이면 episode_rewards를 더해줌
-                final_rewards += (1 - masks)*episode_rewards
+                final_rewards += masks*episode_rewards
 
                 # 에피소드의 총보상을 업데이트
-                episode_rewards *= masks
+                episode_rewards *= (1 - masks)
 
                 # 현재 done이 true이면 모두 0으로 
-                current_obs *= masks
+                current_obs *= (1 - masks)
 
                 # current_obs를 업데이트
                 obs = torch.from_numpy(obs_np).float()  # torch.Size([32, 12])
                 current_obs = obs  # 최신 상태의 obs를 저장
 
                 # 메모리 객체에 현 단계의 transition을 저장
-                rollouts.insert(current_obs, action.data, reward, masks)
-
-                # state record 의 저장 및 초기화
-                for i in range(NUM_PROCESSES):
-                    if (1-masks[i]):
-                        if (masks_arrive[i]):
-                            obs_replay_buffer[i] = 0
-                            distance_replay_buffer[i] = 0
-                    else:
-                        obs_replay_buffer[i,int(each_step[i])] = obs_step[i]
-                        distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
+                rollouts.insert(current_obs, action.data, reward, (1 - masks))
 
             # advanced 학습 for문 끝
 
@@ -336,7 +321,7 @@ class Environment:
             rollouts.after_update()
 
             # 모든 환경이 성공(도착)
-            if torch.sum(masks_arrive) == 0:
+            if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
                 savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
                 torch.save(actor_critic.state_dict(), savepath)
@@ -345,100 +330,3 @@ class Environment:
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
         return obs_replay_buffer, distance_replay_buffer
-
-# In[8]:
-
-
-if __name__ == '__main__':
-    arrive_time = 10
-    quadrotor_env = Environment()
-    data, distance = quadrotor_env.run(arrive_time)
-    np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
-    np.save('./test_system/quadrotor/trained_net/distance_data.npy', distance)
-    
-    t = np.arange(0,arrive_time,0.01)
-
-    def update_lines(num, data, line):
-        # NOTE: there is no .set_data() for 3 dim data...
-        line.set_data(data[0:2, :num])
-        line.set_3d_properties(data[2, :num])
-        return line
-
-    # Attaching 3D axis to the figure
-    fig1 = plt.figure(num = 1, figsize=(plt.figaspect(1)))
-    ax = Axes3D(fig1)
-
-    x = data[0,:,9]
-    y = data[0,:,10]
-    z = data[0,:,11]
-    data_plot = np.array([x,y,z])
-    
-    line = ax.plot(x, y, z)[0]
-
-    # Setting the axes properties
-    ax.set_xlim3d([-50, 50])
-    ax.set_ylim3d([-50, 50])
-    ax.set_zlim3d([0, 100])
-
-    ax.set_ylabel('Y')
-    ax.set_xlabel('X')
-    ax.set_zlabel('Z')
-
-    ax.set_title('Trajectory')
-
-    # Creating the Animation object
-    line_ani = animation.FuncAnimation(fig1, update_lines, 25, fargs=(data_plot, line),
-                                    interval=50, blit=False)
-    line_ani.save('./test_system/quadrotor/trained_net/flight.gif', writer='pillow', fps=60)
-
-    
-    fig2 = plt.figure(num = 2, figsize=(16,9))
-    ax1 = fig2.add_subplot(2, 3, 1)
-    plt.plot(data[0,:,9],
-                data[0,:,10])
-    plt.xlim(-10,10)
-    plt.ylim(-10,10)
-    plt.title('x-y Postition')
-    plt.xlabel('X axis [m]')
-    plt.ylabel('Y axis [m]')
-    plt.grid()
-    
-    ax2 = fig2.add_subplot(2, 3, 2)
-    plt.plot(t,data[0,:,11])
-    plt.title('Height')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Height [m]')
-    plt.grid()
-
-    ax3 = fig2.add_subplot(2, 3, 3)
-    plt.plot(t,data[0,:,6]*180/np.pi,
-                t,data[0,:,7]*180/np.pi,
-                t,data[0,:,8]*180/np.pi)
-    plt.title('Angle')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Angle [deg]')
-    plt.legend(['x(phi)','y(theta)','z(psi)'])
-    plt.grid()
-
-    ax4 = fig2.add_subplot(2, 3, 4)
-    plt.plot(t, data[0,:,0]*180/np.pi,
-                t, data[0,:,1]*180/np.pi,
-                t, data[0,:,2]*180/np.pi)
-    plt.title('Angular Velocity(body)')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Angular Velocity(body) [deg/s]')
-    plt.legend(['x(phi)','y(theta)','z(psi)'])
-    plt.grid()
-    
-    ax3 = fig2.add_subplot(2, 3, 5)
-    plt.plot(t,distance[0,:])
-    plt.title('Distance off from guided trajectory')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Distance [m]')
-    plt.grid()
-
-    fig2.savefig('./test_system/quadrotor/trained_net/flight_data.png')
-    
-    plt.show()
-
-# %%
