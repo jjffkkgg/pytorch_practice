@@ -123,7 +123,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0002)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0005)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -189,7 +189,7 @@ class Environment:
         glob_brain = Brain(actor_critic)                # Brain init
 
         # 각종 정보를 저장하는 변수
-        l_arm = 0.3                             # length or the rotor arm [m]
+        l_arm = 0.4                             # length or the rotor arm [m]
         m = 0.8                                # mass of vehicle [kg]
         rho = 1.225                             # density of air [kg/m^3]
         r = 0.1                                 # radius of propeller
