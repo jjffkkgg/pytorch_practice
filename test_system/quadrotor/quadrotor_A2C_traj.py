@@ -23,7 +23,7 @@ device = torch.device("cuda" if use_cuda else "cpu")
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-NUM_EPISODES = 5000         # 최대 에피소드 수
+NUM_EPISODES = 20000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -123,7 +123,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.001)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0002)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -266,7 +266,7 @@ class Environment:
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
                         elif each_step[i] <= 15:
-                            reward_np[i] = -1000
+                            reward_np[i] = -10000
                         else:
                             reward_np[i] = -200
                             obs_replay_buffer[i] = 0
