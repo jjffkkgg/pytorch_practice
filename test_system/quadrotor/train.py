@@ -11,14 +11,14 @@ import numpy as np
 # In[2]
 
 if __name__ == '__main__':
-    arrive_time = 10
+    arrive_time = 30
     hover_time = 2
     quadrotor_env = train_model.Environment()
     data, distance = quadrotor_env.run(arrive_time, hover_time)
     np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
     np.save('./test_system/quadrotor/trained_net/distance_data.npy', distance)
     
-    t = np.arange(0,arrive_time,0.01)
+    t = np.arange(0,arrive_time + hover_time,0.01)
 
     def update_lines(num, data, line):
         # NOTE: there is no .set_data() for 3 dim data...

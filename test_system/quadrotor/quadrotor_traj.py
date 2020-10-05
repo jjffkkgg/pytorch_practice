@@ -31,7 +31,7 @@ class QuadRotorEnv:
             ]
 
         # start - end
-        self.endpoint = np.array([10, 10, 50])   # [m]
+        self.endpoint = np.array([15, 15, 30])   # [m]
         self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
@@ -154,10 +154,10 @@ class QuadRotorEnv:
             done = True
             print('------crashed to ground------')
         
-        # # done by off trajectory
-        # if distance >= 2:
-        #     print('------2m apart from trajectory------')
-        #     done = True
+        # done by off trajectory
+        if distance >= 10:
+            print('------10m apart from trajectory------')
+            done = True
             
         # done by obstacle crash
         # if self.test_space.is_collide(self.xi[9:12], self.radius):
@@ -165,11 +165,11 @@ class QuadRotorEnv:
         #     print('crashed to obstacle')
 
         # done by exceeding state limit
-        # for i in range(len(self.xi)):
-        #     if self.xi[i] >= self.done_threshold[i] or\
-        #         self.xi[i] <= -self.done_threshold[i]:
-        #         done = True
-        #         print('------over the limit------')
+        for i in range(len(self.xi)):
+            if self.xi[i] >= self.done_threshold[i] or\
+                self.xi[i] <= -self.done_threshold[i]:
+                done = True
+                print('------over the limit------')
         
         # arrival cases
         if step >= (self.time + self.arr_hover_t)*100 - 5:

@@ -17,14 +17,13 @@ from quadrotor_traj import QuadRotorEnv
 '''define device'''
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
-print(device)
 
 
 # In[3]:
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-NUM_EPISODES = 10000         # 최대 에피소드 수
+NUM_EPISODES = 5000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -175,6 +174,9 @@ class Brain(object):
 class Environment:
     def run(self, arrive_time: int, hover_time: int) -> None:
         '''running entry point'''
+        # print device
+        print(device)
+        
         # 동시 실행할 환경 수 만큼 env를 생성
         space_lim = [500, 500, 500]
         envs = [QuadRotorEnv(space_lim) for i in range(NUM_PROCESSES)]
@@ -215,6 +217,7 @@ class Environment:
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
         obs_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100, 12])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100])         # 거리 저장 버퍼
+        reward_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100])           # 보상 저장 버퍼
         obs_step = np.zeros([NUM_PROCESSES, 12])
         distance_step = np.zeros([NUM_PROCESSES, 1])
         episode = 0
@@ -247,7 +250,7 @@ class Environment:
                     obs_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
-                    # state & distance 의 저장 -> reward & replay 위함
+                    # train data 의 저장 -> reward & replay 위함
                     obs_step[i] = obs_np[i]
                     distance_step[i] = distance_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
@@ -256,31 +259,37 @@ class Environment:
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
                         mask_step = torch.FloatTensor([[1.0]])
-                        print(f'{episode+1} set, {i+1} slot: {(each_step[i] + 1)/100} [s]')
+                        print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/100} [s]')
                         if done_info_np[i,0]:    # done with arrival
                             masks_arrive_step= torch.FloatTensor([[1.0]])
                             reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
                         elif each_step[i] <= 15:
-                            reward_np[i] = -100
+                            reward_np[i] = -1000
                         else:
-                            reward_np[i] = -(distance_replay_buffer[i].sum()*0.01)
+                            reward_np[i] = -200
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
-                        each_step[i] = 0                          # step 초기화
-                        obs_np[i] = envs[i].reset(p, arrive_time, hover_time) # 환경 초기화
-                        reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
-                        print(f'reward: {reward_np[i]}, distance: {distance_np[i]}m, mean32: {round(reward_past_32.mean(),2)},'
-                              f' max32: {round(reward_past_32.max(),2)}, min32: {round(reward_past_32.min(),2)}') 
+                        reward_past_32 = np.hstack((reward_past_32[1:],
+                                                    reward_replay_buffer[i,:each_step[i]+1].mean()))
+                        print(f'slot_reward: {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
+                              f'distance: {round(distance_np[i,0],4)}m\n' 
+                              f'reward_mean: {round(reward_past_32.mean(),2)}\n'
+                              f'reward_max: {round(reward_past_32.max(),2)}\n'
+                              f'reward_min: {round(reward_past_32.min(),2)}') 
+                        each_step[i] = 0                                        # step 초기화
+                        obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
+                        reward_replay_buffer[i] = 0
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        reward_np[i] = 0
+                        reward_np[i] = 2-distance_np[i]
                         each_step[i] += 1           # 그대로 진행
+                    reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                     masks = torch.cat((masks, mask_step), dim=0)   
-                    masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)             
+                    masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
 
                 # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
                 reward = torch.from_numpy(reward_np).float()
