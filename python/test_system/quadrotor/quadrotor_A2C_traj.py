@@ -23,13 +23,13 @@ device = torch.device("cuda" if use_cuda else "cpu")
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-NUM_EPISODES = 20000         # 최대 에피소드 수
+NUM_EPISODES = 50000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
-ENTROPY_COEFF = 0.05        # Local min 에서 벗어나기 위한 엔트로피 상수
+ENTROPY_COEFF = 0.1        # Local min 에서 벗어나기 위한 엔트로피 상수
 MAX_GRAD_NORM = 0.5
 
 
@@ -123,7 +123,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0005)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0001)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -274,7 +274,8 @@ class Environment:
                             masks_arrive_step = torch.FloatTensor([[0.0]])
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
-                        print(f'slot_reward: {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
+                        print(f'slot_reward: {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'\
+                              f'done_point: x={round(obs_np[i][9],2)}m y={round(obs_np[i][10],2)}m z={round(obs_np[i][11],2)}m\n'
                               f'distance: {round(distance_np[i,0],4)}m\n' 
                               f'reward_mean: {round(reward_past_32.mean(),2)}\n'
                               f'reward_max: {round(reward_past_32.max(),2)}\n'
@@ -338,4 +339,5 @@ class Environment:
                 return obs_replay_buffer, distance_replay_buffer
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
+        torch.save(actor_critic.state_dict(), savepath)
         return obs_replay_buffer, distance_replay_buffer

@@ -18,8 +18,8 @@ class QuadRotorEnv:
         # control input per step(0.01s)
         self.action_roll = 0.001               # [V]
         self.action_pitch = 0.001
-        self.action_yaw = 0.01
-        self.action_thrust = 0.01
+        self.action_yaw = 0.001
+        self.action_thrust = 0.001
         self.steps_beyond_done = None
 
         # state limit of system
@@ -155,8 +155,8 @@ class QuadRotorEnv:
             print('------crashed to ground------')
         
         # done by off trajectory
-        if distance >= 10:
-            print('------10m apart from trajectory------')
+        if distance >= 5:
+            print('------5m apart from trajectory------')
             done = True
             
         # done by obstacle crash

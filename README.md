@@ -20,4 +20,7 @@ Follow installation guide in ROS neotic.
 To setup the catkin, use following command in terminal. (python(3)-catkin-tools not working)
 ```
 $ pip3 install --user git+https://github.com/catkin/catkin_tools.git
+$ catkin init
+$ catkin build
+$ . ./devel/setup.bash
 ```
