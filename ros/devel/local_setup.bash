@@ -1,1 +1,1 @@
-/home/taehwan/Desktop/develop/pytorch_practice/ros/devel/.private/catkin_tools_prebuild/local_setup.bash
+/home/taehwan/Desktop/develop/ros-torch-control/ros/devel/.private/catkin_tools_prebuild/local_setup.bash

@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-    <rosparam command="load" file="$(find cartpole_tests)/config/cartpole_n1try_params.yaml" />
+    <rosparam command="load" file="$(find quadrotor_a2c)/config/cartpole_n1try_params.yaml" />
+
+    <!-- Gazebo configs -->
+    <arg name="gui" default="true"/>
+    <arg name="debug" default="false"/>
+    <arg name="verbose" default="true"/>
+    <arg name="paused" default="true"/>
+    <arg name="respawn_gazebo" default="true"/>
+
+    <!-- Gazebo sims -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="world_name" value="$(arg world)"/>
+        <arg name="debug" value="$(arg debug)"/>
+        <arg name="verbose" value="true"/>
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
+    </include>
     <!-- Launch the training system -->
-    <node pkg="cartpole_tests" name="cartpole3D_mbalunovic_algorithm" type="cartpole3D_n1try_algorithm_with_rosparams.py" output="screen"/>
+    <node pkg="quadrotor_a2c" name="ros_gazebo_training" type="train.py" output="screen"/>
 </launch>

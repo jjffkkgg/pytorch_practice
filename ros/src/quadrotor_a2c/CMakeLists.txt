@@ -115,14 +115,16 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
+  src
   ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/quadrotor_a2c.cpp
-# )
+add_library(QuadrotorPlugin
+  src/QuadrotorPlugin/QuadrotorPlugin.cpp
+  src/QuadrotorPlugin/casadi_gen.c
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
