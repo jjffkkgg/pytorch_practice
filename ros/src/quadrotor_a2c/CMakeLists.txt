@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
 )
 
+find_package(catkin REQUIRED)
+find_package(gazebo REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -118,11 +120,13 @@ include_directories(
   include
   src
   ${catkin_INCLUDE_DIRS}
+  ${GAZEBO_INCLUDE_DIRS}
+  ${CMAKE_BINARY_DIR}
 )
 
 ## Declare a C++ library
 add_library(QuadrotorPlugin
-  src/QuadrotorPlugin/QuadrotorPlugin.cpp
+  src/QuadrotorPlugin/QuadrotorPlugin.cc
   src/QuadrotorPlugin/casadi_gen.c
 )
 
