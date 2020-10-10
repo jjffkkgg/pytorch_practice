@@ -15,83 +15,248 @@
  *
 */
 
-#ifndef GAZEBO_PLUGINS_QuadrotorPLUGIN_HH_
-#define GAZEBO_PLUGINS_QuadrotorPLUGIN_HH_
-
-#include <array>
-#include <mutex>
+#include <functional>
+#include "math.h"
 #include <string>
 #include <sdf/sdf.hh>
+#include <gazebo/common/Assert.hh>
 #include <gazebo/common/Plugin.hh>
-#include <gazebo/common/UpdateInfo.hh>
-#include <gazebo/physics/PhysicsTypes.hh>
-#include "casadi/CasadiFunc.hpp"
-#include "casadi_gen.h"
+#include <gazebo/physics/physics.hh>
+#include "QuadrotorPlugin.hh"
 
-namespace gazebo
+
+using namespace gazebo;
+
+GZ_REGISTER_MODEL_PLUGIN(QuadrotorPlugin)
+
+////////////////////////////////////////////////////////////////////////////////
+QuadrotorPlugin::QuadrotorPlugin():
+    state_from_gz(state_from_gz_functions()),
+    rocket_u_to_fin(rocket_u_to_fin_functions()),
+    rocket_control(pitch_ctrl_functions()),
+    rocket_force_moment(rocket_force_moment_functions())
 {
-
-  class GAZEBO_VISIBLE QuadrotorPlugin : public ModelPlugin
-  {
-    /// \brief Constructor.
-    public: QuadrotorPlugin();
-
-    /// \brief Destructor.
-    public: ~QuadrotorPlugin();
-
-    // Documentation Inherited.
-    public: virtual void Load(physics::ModelPtr _model, sdf::ElementPtr _sdf);
-
-    /// \brief Read an SDF parameter with a joint name and initialize a pointer
-    /// to this joint.
-    /// \param[in] _sdfParam SDF parameter containing a joint name.
-    /// \param[in] _sdf Pointer to the SDF element containing the parameters.
-    /// \param[out] _joint Pointer to the joint to be initialized.
-    /// \return True if the SDF parameter is found and the joint name is found,
-    ///         false otherwise.
-    // private: bool FindJoint(const std::string &_sdfParam,
-    //     sdf::ElementPtr _sdf, physics::JointPtr &_joint);
-
-    /// \brief Read an SDF parameter with a joint name and initialize a pointer
-    /// to this joint.
-    /// \param[in] _sdfParam SDF parameter containing a joint name.
-    /// \param[in] _sdf Pointer to the SDF element containing the parameters.
-    /// \param[out] _link Pointer to the link to be initialized.
-    /// \return True if the SDF parameter is found and the link name is found,
-    ///         false otherwise.
-    // private: bool FindLink(const std::string &_sdfParam,
-    //     sdf::ElementPtr _sdf, physics::LinkPtr &_link);
-
-    /// \brief Update the control surfaces controllers.
-    /// \param[in] _info Update information provided by the server.
-    private: void Update(const common::UpdateInfo &_info);
-
-    /// \brief Pointer to the update event connection.
-    private: event::ConnectionPtr updateConnection;
-
-    /// \brief Pointer to the model;
-    private: physics::ModelPtr model;
-
-    /// \brief keep track of controller update sim-time.
-    private: gazebo::common::Time lastUpdateTime;
-
-    /// \brief Controller update mutex.
-    private: std::mutex mutex;
-
-    /// \brief Motor Link
-    private: physics::LinkPtr body;
-	  private: physics::JointPtr fin[4];
-
-	/// \brief Our casadi functions
-    private: CasadiFunc state_from_gz;
-    private: CasadiFunc rocket_u_to_fin;
-    private: CasadiFunc rocket_control;
-    private: CasadiFunc rocket_force_moment;
-    
-    private: double t0;
-    private: double x_ctrl[2] = {0,0};
-    private: double m_dot = 0.1;
-    private: double u[4] = {m_dot,0,0,0};
-  };
+    std::cout << "hello rocket plugin" << std::endl;
 }
-#endif
+
+/////////////////////////////////////////////////
+QuadrotorPlugin::~QuadrotorPlugin()
+{
+  this->updateConnection.reset();
+}
+
+/////////////////////////////////////////////////
+bool QuadrotorPlugin::FindJoint(const std::string &_sdfParam, sdf::ElementPtr _sdf,
+    physics::JointPtr &_joint)
+{
+  // Read the required plugin parameters.
+  if (!_sdf->HasElement(_sdfParam))
+  {
+    gzerr << "Unable to find the <" << _sdfParam << "> parameter." << std::endl;
+    return false;
+  }
+
+  std::string jointName = _sdf->Get<std::string>(_sdfParam);
+  _joint = this->model->GetJoint(jointName);
+  if (!_joint)
+  {
+    gzerr << "Failed to find joint [" << jointName
+          << "] aborting plugin load." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/////////////////////////////////////////////////
+bool QuadrotorPlugin::FindLink(const std::string &_sdfParam, sdf::ElementPtr _sdf,
+    physics::LinkPtr &_link)
+{
+  // Read the required plugin parameters.
+  if (!_sdf->HasElement(_sdfParam))
+  {
+    gzerr << "Unable to find the <" << _sdfParam << "> parameter." << std::endl;
+    return false;
+  }
+
+  std::string linkName = _sdf->Get<std::string>(_sdfParam);
+  _link = this->model->GetLink(linkName);
+  if (!_link)
+  {
+    gzerr << "Failed to find link [" << linkName
+          << "] aborting plugin load." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/////////////////////////////////////////////////
+void QuadrotorPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
+{
+  GZ_ASSERT(_model, "QuadrotorPlugin _model pointer is NULL");
+  GZ_ASSERT(_sdf, "QuadrotorPlugin _sdf pointer is NULL");
+  this->model = _model;
+
+  if (!this->FindLink("body", _sdf, this->body)) {
+    GZ_ASSERT(false, "QuadrotorPlugin failed to find body");
+  }
+
+  // Find body link to apply
+  for (int i=0; i<4; i++ ) {
+      std::string name = "fin" + std::to_string(i);
+      if (!this->FindJoint(name, _sdf, this->fin[i])) {
+        std::string error = "QuadrotorPlugin failed to find " + name;
+        GZ_ASSERT(false, error.c_str());
+      }
+  }
+
+  // Disable gravity, we will handle this in plugin
+  this->body->SetGravityMode(false);
+  this->body->GetInertial()->SetMass(0.8); //  set your total mass with fuel here
+
+
+  // Update time.
+  this->lastUpdateTime = this->model->GetWorld()->SimTime();
+
+  // Listen to the update event. This event is broadcast every simulation
+  // iteration.
+  this->updateConnection = event::Events::ConnectWorldUpdateBegin(
+    std::bind(&QuadrotorPlugin::Update, this, std::placeholders::_1));
+
+  gzlog << "Rocket ready to fly. The force will be with you" << std::endl;
+  t0 = this->model->GetWorld()->SimTime().Double();
+}
+
+/////////////////////////////////////////////////
+void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
+{
+  std::lock_guard<std::mutex> lock(this->mutex);
+
+  gazebo::common::Time curTime = this->model->GetWorld()->SimTime();
+  double t = this->model->GetWorld()->SimTime().Double() - t0;
+
+  if (curTime > this->lastUpdateTime)
+  {
+    // elapsed time
+    double dt = (curTime - this->lastUpdateTime).Double();
+    this->lastUpdateTime = curTime;
+
+    // parameters
+    const double l_arm = 0.4;
+    const double m = 0.8
+    const double rho = 1.225;
+    const double r = 0.1
+    const double V = 11.1
+    const double kV = 1550
+    const double CT = 1.0e-2
+    const double Cm = 1e-4
+    const double g = 9.8;
+    const double Jx = 0.021;
+    const double Jy = 0.021;
+    const double Jz = 0.042;
+    const double Jxz = 0;
+    const double CD0 = 0.01;
+    double p[12] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz};
+
+    // state
+    auto inertial = this->body->GetInertial();
+    double m = inertial->Mass();
+    auto vel_ENU = this->body->RelativeLinearVel();
+    auto omega_ENU = this->body->RelativeAngularVel();
+    auto pose = this->body->WorldPose();
+    auto q_ENU_FLT = pose.Rot();
+    auto pos_ENU = pose.Pos();
+    double m_fuel = m - m_empty;
+
+    // native gazebo state
+    double x_gz[14] = {
+      omega_ENU.X(), omega_ENU.Y(), omega_ENU.Z(),
+      q_ENU_FLT.W(), q_ENU_FLT.X(), q_ENU_FLT.Y(), q_ENU_FLT.Z(),
+      vel_ENU.X(), vel_ENU.Y(), vel_ENU.Z(),
+      pos_ENU.X(), pos_ENU.Y(), pos_ENU.Z(),
+      m_fuel};
+
+    // state from gazebo state
+    double x[14];
+    state_from_gz.arg(0, x_gz);
+    state_from_gz.res(0, x);
+    state_from_gz.eval();
+
+    // control
+    double pitch_ref = 0;
+    gzdbg << "t: "<<t<< "dt: "<< dt << std::endl;
+  
+    if (t < 1){
+      pitch_ref = 60;
+    }
+    else
+    {
+      pitch_ref = (-0.521*t*t*t + 8.9935*t*t - 49.943*t + 90.646);
+    }
+    gzdbg << "Pitch_ref: " << pitch_ref << std::endl;
+    pitch_ref = pitch_ref*3.14159265359/180.0;
+    
+    double mrp[4] = {x[3],x[4],x[5],x[6]};
+    rocket_control.arg(0, x_ctrl);
+    rocket_control.arg(1, mrp);
+    rocket_control.arg(2, &pitch_ref);
+    rocket_control.res(0, x_ctrl);
+    rocket_control.res(1, &u[2]);
+    rocket_control.eval();
+    if(m_fuel <= 0)
+    {
+      u[2] = 0;
+    }
+    // force moment
+    double F_FLT[3];
+    double M_FLT[3];
+    rocket_force_moment.arg(0, x);
+    rocket_force_moment.arg(1, u);
+    rocket_force_moment.arg(2, p);
+    rocket_force_moment.res(0, F_FLT);
+    rocket_force_moment.res(1, M_FLT);
+    rocket_force_moment.eval();
+
+    // set joints
+    double fin[4];
+    rocket_u_to_fin.arg(0, u);
+    rocket_u_to_fin.res(0, fin);
+    rocket_u_to_fin.eval();
+    for (int i=0; i<4; i++) {
+      this->fin[i]->SetPosition(0, fin[i]);
+    }
+
+    // integration for rocket mass flow
+    m_dot = u[0];
+    m -= m_dot*dt;
+    if (m < m_empty) {
+      m = m_empty;
+      m_dot = 0;
+    }
+    inertial->SetMass(m);
+    inertial->SetInertiaMatrix(Jx + m_fuel*l_motor*l_motor, Jy + m_fuel*l_motor*l_motor, Jz, 0, 0, 0);
+
+    // debug
+    // for (int i=0; i<14; i++) {
+    //   gzdbg << "x[" << i << "]: " << x[i] << "\n";
+    // }
+    for (int i=0; i<4; i++) {
+      gzdbg << "u[" << i << "]: " << u[i] << "\n";
+    }
+    // for (int i=0; i<15; i++) {
+    //   gzdbg << "p[" << i << "]: " << p[i] << "\n";
+    // }
+    gzdbg << std::endl;
+    gzdbg << "mass: " << m << std::endl;
+    gzdbg << "force: " << F_FLT[0] << " " << F_FLT[1] << " " << F_FLT[2] << std::endl;
+    gzdbg << "moment: " << M_FLT[0] << " " << M_FLT[1] << " " << M_FLT[2] << std::endl;
+
+    // apply forces and moments
+    for (int i=0; i<3; i++) {
+      // check that forces/moments finite before we apply them
+      GZ_ASSERT(isfinite(F_FLT[i]), "non finite force");
+      GZ_ASSERT(isfinite(M_FLT[i]), "non finite moment");
+    }
+    this->body->AddRelativeForce(ignition::math::v4::Vector3d(F_FLT[0], F_FLT[1], F_FLT[2]));
+    this->body->AddRelativeTorque(ignition::math::v4::Vector3d(M_FLT[0], M_FLT[1], M_FLT[2]));
+  }
+}

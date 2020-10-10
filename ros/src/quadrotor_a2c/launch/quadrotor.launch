@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-    <rosparam command="load" file="$(find quadrotor_a2c)/config/cartpole_n1try_params.yaml" />
+    <!-- <rosparam command="load" file="$(find quadrotor_a2c)/config/cartpole_n1try_params.yaml" /> -->
 
     <!-- Gazebo configs -->
     <arg name="gui" default="true"/>

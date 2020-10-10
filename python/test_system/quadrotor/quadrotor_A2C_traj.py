@@ -23,10 +23,10 @@ device = torch.device("cuda" if use_cuda else "cpu")
 
 '''Global Variables'''
 GAMMA = 0.99                # 시간할인율
-NUM_EPISODES = 50000         # 최대 에피소드 수
+NUM_EPISODES = 5000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 50      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.1        # Local min 에서 벗어나기 위한 엔트로피 상수
@@ -190,7 +190,7 @@ class Environment:
 
         # 각종 정보를 저장하는 변수
         l_arm = 0.4                             # length or the rotor arm [m]
-        m = 0.8                                # mass of vehicle [kg]
+        m = 1                                # mass of vehicle [kg]
         rho = 1.225                             # density of air [kg/m^3]
         r = 0.1                                 # radius of propeller
         V = 11.1                                # voltage of battery [V]
@@ -279,7 +279,8 @@ class Environment:
                               f'distance: {round(distance_np[i,0],4)}m\n' 
                               f'reward_mean: {round(reward_past_32.mean(),2)}\n'
                               f'reward_max: {round(reward_past_32.max(),2)}\n'
-                              f'reward_min: {round(reward_past_32.min(),2)}') 
+                            #   f'reward_min: {round(reward_past_32.min(),2)}'
+                              ) 
                         each_step[i] = 0                                        # step 초기화
                         obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
                         reward_replay_buffer[i] = 0

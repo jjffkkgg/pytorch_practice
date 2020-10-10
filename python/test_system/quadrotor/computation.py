@@ -22,6 +22,14 @@ class Computation:
         return CT*q*s,Cm*q*s
 
     @staticmethod
+    def throttle(force, rho, r, V, kV, CT, Cm):
+        s = ca.pi*r**2
+        q = 0.25*force / (s * CT)
+        omega = ((2*q/rho)**0.5)*(1/r)
+
+        return (omega/(V*kV))*(60/(2*ca.pi))
+
+    @staticmethod
     def euler_kinematics(e, w):
         '''Derivative of Euler angles'''
         v = ca.SX.sym('v',3)

@@ -211,9 +211,10 @@ class QuadRotorEnv:
         self.xi = [0] * 12
         self.steps_beyond_done = None
         self.p = p
-        self.u = np.array([0.0,0.0,0.0,2.24])
+        self.hover_thrust = comp.throttle(p[0]*p[8],p[3],p[2],p[4],p[5],p[6],p[7])
+        self.u = np.array([0.0,0.0,0.0,self.hover_thrust * 4])
         self.t = 0
-        self.radius = 2 * self.p[1]
+        # self.radius = 2 * self.p[1]
         self.time = arrive_time
         self.arr_hover_t = hover_time
         self.trajectory = np.linspace(self.xi[9:12], self.endpoint, self.time*100)
