@@ -36,7 +36,7 @@ QuadrotorPlugin::QuadrotorPlugin():
     rocket_control(pitch_ctrl_functions()),
     rocket_force_moment(rocket_force_moment_functions())
 {
-    std::cout << "hello rocket plugin" << std::endl;
+    std::cout << "hello quadrotor plugin" << std::endl;
 }
 
 /////////////////////////////////////////////////
@@ -155,28 +155,28 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
     const double Jz = 0.042;
     const double Jxz = 0;
     const double CD0 = 0.01;
-    double p[12] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz};
+    double p[14] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz, Jxz, CD0};
 
     // state
-    auto inertial = this->body->GetInertial();
-    double m = inertial->Mass();
-    auto vel_ENU = this->body->RelativeLinearVel();
-    auto omega_ENU = this->body->RelativeAngularVel();
+    // auto inertial = this->body->GetInertial();
+    // double m = inertial->Mass();
+    auto vel_B = this->body->RelativeLinearVel();       // body? inertial?
+    auto omega_B = this->body->RelativeAngularVel();    // body? inertial?
     auto pose = this->body->WorldPose();
-    auto q_ENU_FLT = pose.Rot();
-    auto pos_ENU = pose.Pos();
-    double m_fuel = m - m_empty;
+    auto euler_INE = pose.Rot().Euler();                // return as quternion -> Euler
+    auto pos_INE = pose.Pos();
+    // double m_fuel = m - m_empty;
 
     // native gazebo state
-    double x_gz[14] = {
-      omega_ENU.X(), omega_ENU.Y(), omega_ENU.Z(),
-      q_ENU_FLT.W(), q_ENU_FLT.X(), q_ENU_FLT.Y(), q_ENU_FLT.Z(),
-      vel_ENU.X(), vel_ENU.Y(), vel_ENU.Z(),
-      pos_ENU.X(), pos_ENU.Y(), pos_ENU.Z(),
-      m_fuel};
+    double x_gz[12] = {
+      omega_B.X(), omega_B.Y(), omega_B.Z(),
+      vel_B.X(), vel_B.Y(), vel_B.Z(),
+      euler_INE.X(), euler_INE.Y(), euler_INE.Z()
+      pos_INE.X(), pos_INE.Y(), pos_INE.Z()
+      };
 
     // state from gazebo state
-    double x[14];
+    double x[12];
     state_from_gz.arg(0, x_gz);
     state_from_gz.res(0, x);
     state_from_gz.eval();
