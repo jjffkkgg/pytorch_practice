@@ -24,7 +24,7 @@ class Computation:
     @staticmethod
     def throttle(force, rho, r, V, kV, CT, Cm):
         s = ca.pi*r**2
-        q = force / (s * CT)
+        q = 0.25*force / (s * CT)
         omega = ((2*q/rho)**0.5)*(1/r)
 
         return (omega/(V*kV))*(60/(2*ca.pi))

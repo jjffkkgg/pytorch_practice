@@ -1,7 +1,7 @@
 ﻿import casadi as ca
 import numpy as np
 import sys
-sys.path.insert(0,'./python/test_system/quadrotor')
+sys.path.insert(0,'../../../../../python/test_system/quadrotor')
 from computation import Computation as comp
 
 def quadrotor_eqation(jit=True):
