@@ -1,8 +1,8 @@
 ﻿import casadi as ca
 import numpy as np
 import sys
-sys.path.insert(0,'../../../../python/test_system')
-import computation as comp
+sys.path.insert(0,'./python/test_system/quadrotor')
+from computation import Computation as comp
 
 def quadrotor_eqation(jit=True):
 
@@ -13,12 +13,12 @@ def quadrotor_eqation(jit=True):
         ]
     motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
-    self.observation_space_size = 12    # size of state space
-    self.action_space_size = 8          # size of action space
+    observation_space_size = 12    # size of state space
+    action_space_size = 8          # size of action space
 
     # state (x)
     x = ca.SX.sym(
-        'x',self.observation_space_size
+        'x',observation_space_size
         )
     omega_b = x[0:3]                      # Angular velocity (body)
     vel_b = x[3:6]                        # Velocity (body)
@@ -30,7 +30,7 @@ def quadrotor_eqation(jit=True):
     u_mix = ca.SX.sym('u_mix', 4)           # roll, pitch, yaw, throttle [V]
 
     # parameters
-    p = ca.SX.sym('p', 12)
+    p = ca.SX.sym('p', 13)
     m = p[0]                # mass of the body [kg]
     l_arm = p[1]            # length or the rotor arm [m]
     r = p[2]                # radius of propeller [m]
@@ -43,13 +43,15 @@ def quadrotor_eqation(jit=True):
     Jx = p[9]
     Jy = p[10]
     Jz = p[11]
+    CD0 = p[12]
 
     J_b = ca.diag(ca.vertcat(Jx, Jy, Jz))                         # Moment of inertia of quadrotor
 
     # forces and moments
-    C_bn = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
+    C_nb = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
     F_b = ca.vertcat(0, 0, 0)
-    F_b = ca.mtimes(C_bn.T, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+    F_b = ca.mtimes(C_nb, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+    # F_drag = Cd * 
     M_b = ca.SX.zeros(3)                                          # Body moment(torque) Initialize
     u_motor = comp.saturate(
         comp.mix2motor(u_mix), len(motor_dirs)
@@ -80,7 +82,7 @@ def quadrotor_eqation(jit=True):
                     M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (angular acceleration)
         F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (acceleration)
         comp.euler_kinematics(euler,omega_b),                                       # omega (angular velocity) (inertial)
-        ca.mtimes(C_bn, vel_b),                                                     # v (velocity) (inertial)
+        ca.mtimes(C_nb.T, vel_b),                                                     # v (velocity) (inertial)
         )], ['x','u_mix','p'],['x_dot'])
 
     return {
@@ -93,14 +95,50 @@ def quadrotor_eqation(jit=True):
 
     
 def gazebo_equations():
-    omega_B = ca.SX.sym('omega_B', 3)
-    vel_B = ca.SX.sym('vel_B', 3)
+    omega_INE = ca.SX.sym('omega_INE', 3)
+    vel_INE = ca.SX.sym('vel_INE', 3)
     euler_INE = ca.SX.sym('euler_INE', 3)
     pos_INE = ca.SX.sym('pos_INE', 3)
-    x_gz = ca.vertcat(omega_B, vel_B, euler_INE, pos_INE)
+    x_gz = ca.vertcat(omega_INE, vel_INE, euler_INE, pos_INE)
+    
+    C_nb = comp.euler_to_dcm(euler_INE)
+    vel_B = ca.mtimes(C_nb, vel_INE)
+    omega_B = ca.mtimes(C_nb, omega_INE)
+
+    x = ca.vertcat(omega_B, vel_B, euler_INE, pos_INE)
 
     state_from_gz = ca.Function('state_from_gz',[x_gz],[x],['x_gz'],['x'])
 
+    return {
+        'state_from_gz': state_from_gz
+    }
 
 
-def code_gen():
+
+def code_generation():
+    x = ca.SX.sym('x', 12)
+    x_gz = ca.SX.sym('x_gz', 12)
+    p = ca.SX.sym('p', 13)
+    u_mix = ca.SX.sym('u_mix', 4)
+    t = ca.SX.sym('t')
+    dt = ca.SX.sym('dt')
+
+    eqs = quadrotor_eqation()
+    gz_eqs = gazebo_equations()
+
+    f_state = gz_eqs['state_from_gz']
+
+    F_b,M_b = eqs['force_moment'](x,u_mix,p)
+    
+    f_force_moment = ca.Function('quad_force_moment',
+        [x,u_mix,p],[F_b,M_b],['x','u_mix','p'],['F_b','M_b'])
+
+    gen = ca.CodeGenerator(
+        'casadi_gen.c',
+        {'main': False, 'mex': False, 'with_header': True, 'with_mem': True})
+    gen.add(f_state)
+    gen.add(f_force_moment)
+    gen.generate()
+
+if __name__ == "__main__":
+    code_generation()

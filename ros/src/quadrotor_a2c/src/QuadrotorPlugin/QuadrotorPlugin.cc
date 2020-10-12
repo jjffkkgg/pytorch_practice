@@ -154,14 +154,14 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
     const double Jy = 0.021;
     const double Jz = 0.042;
     const double Jxz = 0;
-    const double CD0 = 0.01;
-    double p[14] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz, Jxz, CD0};
+    const double CD0 = 0.;
+    double p[14] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz, Jxz, Cd};
 
     // state
     // auto inertial = this->body->GetInertial();
     // double m = inertial->Mass();
-    auto vel_B = this->body->RelativeLinearVel();       // body? inertial?
-    auto omega_B = this->body->RelativeAngularVel();    // body? inertial?
+    auto vel_INE = this->body->RelativeLinearVel();       // inertial frame
+    auto omega_INE = this->body->RelativeAngularVel();    // inertial frame
     auto pose = this->body->WorldPose();
     auto euler_INE = pose.Rot().Euler();                // return as quternion -> Euler
     auto pos_INE = pose.Pos();
@@ -169,8 +169,8 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
 
     // native gazebo state
     double x_gz[12] = {
-      omega_B.X(), omega_B.Y(), omega_B.Z(),
-      vel_B.X(), vel_B.Y(), vel_B.Z(),
+      omega_INE.X(), omega_INE.Y(), omega_INE.Z(),
+      vel_INE.X(), vel_INE.Y(), vel_INE.Z(),
       euler_INE.X(), euler_INE.Y(), euler_INE.Z()
       pos_INE.X(), pos_INE.Y(), pos_INE.Z()
       };

@@ -26,7 +26,7 @@ GAMMA = 0.99                # 시간할인율
 NUM_EPISODES = 5000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 50      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 32      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.1        # Local min 에서 벗어나기 위한 엔트로피 상수
@@ -278,7 +278,7 @@ class Environment:
                               f'done_point: x={round(obs_np[i][9],2)}m y={round(obs_np[i][10],2)}m z={round(obs_np[i][11],2)}m\n'
                               f'distance: {round(distance_np[i,0],4)}m\n' 
                               f'reward_mean: {round(reward_past_32.mean(),2)}\n'
-                              f'reward_max: {round(reward_past_32.max(),2)}\n'
+                              f'reward_max: {round(reward_past_32.max(),2)}'
                             #   f'reward_min: {round(reward_past_32.min(),2)}'
                               ) 
                         each_step[i] = 0                                        # step 초기화
@@ -340,5 +340,6 @@ class Environment:
                 return obs_replay_buffer, distance_replay_buffer
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
+        savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
         torch.save(actor_critic.state_dict(), savepath)
         return obs_replay_buffer, distance_replay_buffer
