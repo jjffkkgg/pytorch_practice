@@ -49,8 +49,8 @@ namespace gazebo
     /// \param[out] _joint Pointer to the joint to be initialized.
     /// \return True if the SDF parameter is found and the joint name is found,
     ///         false otherwise.
-    private: bool FindJoint(const std::string &_sdfParam,
-        sdf::ElementPtr _sdf, physics::JointPtr &_joint);
+    // private: bool FindJoint(const std::string &_sdfParam,
+    //     sdf::ElementPtr _sdf, physics::JointPtr &_joint);
 
     /// \brief Read an SDF parameter with a joint name and initialize a pointer
     /// to this joint.
@@ -59,8 +59,8 @@ namespace gazebo
     /// \param[out] _link Pointer to the link to be initialized.
     /// \return True if the SDF parameter is found and the link name is found,
     ///         false otherwise.
-    private: bool FindLink(const std::string &_sdfParam,
-        sdf::ElementPtr _sdf, physics::LinkPtr &_link);
+    // private: bool FindLink(const std::string &_sdfParam,
+    //     sdf::ElementPtr _sdf, physics::LinkPtr &_link);
 
     /// \brief Update the control surfaces controllers.
     /// \param[in] _info Update information provided by the server.
@@ -84,14 +84,14 @@ namespace gazebo
 
 	/// \brief Our casadi functions
     private: CasadiFunc state_from_gz;
-    private: CasadiFunc rocket_u_to_fin;
-    private: CasadiFunc rocket_control;
-    private: CasadiFunc rocket_force_moment;
+    // private: CasadiFunc rocket_u_to_fin;
+    // private: CasadiFunc rocket_control;
+    private: CasadiFunc quad_force_moment;
     
     private: double t0;
-    private: double x_ctrl[2] = {0,0};
-    private: double m_dot = 0.1;
-    private: double u[4] = {m_dot,0,0,0};
+    // private: double x_ctrl[2] = {0,0};
+    // private: double m_dot = 0.1;
+    private: double u[4] = {0,0,0,0};
   };
 }
 #endif

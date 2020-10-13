@@ -26,12 +26,12 @@ GAMMA = 0.99                # 시간할인율
 NUM_EPISODES = 5000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 32      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
 VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.1        # Local min 에서 벗어나기 위한 엔트로피 상수
 MAX_GRAD_NORM = 0.5
-
+DELTA_T = 0.005
 
 # In[4]:
 
@@ -123,7 +123,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0001)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0005)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -215,9 +215,9 @@ class Environment:
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                    # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
-        obs_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100, 12])          # state 저장 버퍼
-        distance_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100])         # 거리 저장 버퍼
-        reward_replay_buffer = np.zeros([NUM_PROCESSES, travel_time*100])           # 보상 저장 버퍼
+        obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 12])          # state 저장 버퍼
+        distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
+        reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
         obs_step = np.zeros([NUM_PROCESSES, 12])
         distance_step = np.zeros([NUM_PROCESSES, 1])
         episode = 0
@@ -259,7 +259,7 @@ class Environment:
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
                         mask_step = torch.FloatTensor([[1.0]])
-                        print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/100} [s]')
+                        print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
                         if done_info_np[i,0]:    # done with arrival
                             masks_arrive_step= torch.FloatTensor([[1.0]])
                             reward_np[i] = 10000.0

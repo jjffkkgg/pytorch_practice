@@ -5,6 +5,9 @@ from computation import Computation as comp
 from test_space import Obstacle
 import warnings
 
+'''GLOBAL VARIABLE'''
+DELTA_T = 0.005  
+
 class QuadRotorEnv:
 
     def __init__(self, lim: list) -> None:
@@ -15,7 +18,7 @@ class QuadRotorEnv:
             ]
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
-        # control input per step(0.01s)
+        # control input per step(DELTA_T (s))
         self.action_roll = 0.001               # [V]
         self.action_pitch = 0.001
         self.action_yaw = 0.001
@@ -104,7 +107,7 @@ class QuadRotorEnv:
             ca.mtimes(C_bn, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
-    def step(self, action: int, step, dt=0.01):
+    def step(self, action: int, step, dt=DELTA_T):
         '''calculate state after step input'''
         action_roll = np.array([self.action_roll,0,0,0])
         action_pitch = np.array([0,self.action_pitch,0,0])
@@ -150,7 +153,7 @@ class QuadRotorEnv:
         distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step + 1])
         
         # done by ground crash
-        if self.xi[11] <= 0 and step >= 10:
+        if self.xi[11] <= 0 and step >= 0.1*(1/DELTA_T):
             done = True
             print('------crashed to ground------')
         
@@ -172,7 +175,7 @@ class QuadRotorEnv:
                 print('------over the limit------')
         
         # arrival cases
-        if step >= (self.time + self.arr_hover_t)*100 - 5:
+        if step >= (self.time + self.arr_hover_t)*(1/dt) - 5:
             if distance <= 0.1:
                 if np.linalg.norm(self.xi[3:6]) <= 0.05:
                     if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
@@ -217,8 +220,8 @@ class QuadRotorEnv:
         # self.radius = 2 * self.p[1]
         self.time = arrive_time
         self.arr_hover_t = hover_time
-        self.trajectory = np.linspace(self.xi[9:12], self.endpoint, self.time*100)
-        for _ in range(self.arr_hover_t * 100):
+        self.trajectory = np.linspace(self.xi[9:12], self.endpoint, int(self.time*(1/DELTA_T)))
+        for _ in range(int(self.arr_hover_t * (1/DELTA_T))):
             self.trajectory = np.vstack((self.trajectory, self.endpoint))
 
         return self.xi
