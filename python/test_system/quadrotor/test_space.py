@@ -52,7 +52,7 @@ class Obstacle:
         distance = np.sqrt(np.sum((close - sphcenter_np)**2, axis = 1))
 
         for i in range(len(self.wallcenter)):
-            if distance[i] < radius:
+            if distance[i] <= radius:
                 return True
 
         return False

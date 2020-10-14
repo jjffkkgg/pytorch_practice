@@ -4,9 +4,10 @@ import scipy.integrate
 from computation import Computation as comp
 from test_space import Obstacle
 import warnings
+import params as par
 
 '''GLOBAL VARIABLE'''
-DELTA_T = 0.005  
+DELTA_T = par.DELTA_T 
 
 class QuadRotorEnv:
 
@@ -19,10 +20,10 @@ class QuadRotorEnv:
         motor_dirs = [1, 1, -1, -1]             # motor rotation direction
 
         # control input per step(DELTA_T (s))
-        self.action_roll = 0.001               # [V]
-        self.action_pitch = 0.001
-        self.action_yaw = 0.001
-        self.action_thrust = 0.001
+        self.action_roll = par.action_roll               # [V]
+        self.action_pitch = par.action_pitch
+        self.action_yaw = par.action_yaw
+        self.action_thrust = par.action_thrust
         self.steps_beyond_done = None
 
         # state limit of system
@@ -34,8 +35,8 @@ class QuadRotorEnv:
             ]
 
         # start - end
-        self.endpoint = np.array([15, 15, 30])   # [m]
-        self.arrivetime = 0.0                   # [s]
+        self.endpoint = par.endpoint   # [m]
+        # self.arrivetime = 0.0                   # [s]
         
         self.observation_space_size = 12    # size of state space
         self.action_space_size = 8          # size of action space
@@ -158,8 +159,9 @@ class QuadRotorEnv:
             print('------crashed to ground------')
         
         # done by off trajectory
-        if distance >= 5:
-            print('------5m apart from trajectory------')
+        off_dist = par.off_dist
+        if distance >= off_dist:
+            print(f'------{off_dist}m apart from trajectory------')
             done = True
             
         # done by obstacle crash

@@ -59,8 +59,8 @@ namespace gazebo
     /// \param[out] _link Pointer to the link to be initialized.
     /// \return True if the SDF parameter is found and the link name is found,
     ///         false otherwise.
-    // private: bool FindLink(const std::string &_sdfParam,
-    //     sdf::ElementPtr _sdf, physics::LinkPtr &_link);
+    private: bool FindLink(const std::string &_sdfParam,
+        sdf::ElementPtr _sdf, physics::LinkPtr &_link);
 
     /// \brief Update the control surfaces controllers.
     /// \param[in] _info Update information provided by the server.

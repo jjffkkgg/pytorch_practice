@@ -6,19 +6,19 @@ from mpl_toolkits.mplot3d.art3d import Line3D
 import matplotlib.animation as animation
 import quadrotor_A2C_traj as train_model
 import numpy as np
-
+import params as par
 
 # In[2]
 
 if __name__ == '__main__':
-    arrive_time = 30
-    hover_time = 2
+    arrive_time = par.arrive_time
+    hover_time = par.hover_time
     quadrotor_env = train_model.Environment()
     data, distance = quadrotor_env.run(arrive_time, hover_time)
-    np.save('./test_system/quadrotor/trained_net/flight_data.npy', data)
-    np.save('./test_system/quadrotor/trained_net/distance_data.npy', distance)
+    np.save('./python/test_system/quadrotor/trained_net/flight_data.npy', data)
+    np.save('./python/test_system/quadrotor/trained_net/distance_data.npy', distance)
     
-    t = np.arange(0,arrive_time + hover_time,0.01)
+    t = np.arange(0,arrive_time + hover_time,par.DELTA_T)
 
     def update_lines(num, data, line):
         # NOTE: there is no .set_data() for 3 dim data...

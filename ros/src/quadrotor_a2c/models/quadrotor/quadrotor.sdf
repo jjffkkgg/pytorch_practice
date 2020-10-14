@@ -22,5 +22,14 @@
         </geometry>
       </visual>
     </link>
+
+    <plugin name="quadrotor_plugin" filename="libQuadrotorPlugin.so">
+      <body>body</body>
+      <!-- <fin0>fin0_joint</fin0>
+      <fin1>fin1_joint</fin1>
+      <fin2>fin2_joint</fin2>
+      <fin3>fin3_joint</fin3> -->
+    </plugin>
+
   </model>
 </sdf>

@@ -87,7 +87,7 @@ class Computation:
     @staticmethod
     def saturate(motor: ca.SX, len: int) -> ca.SX:
         ''' saturate the input motor voltage '''
-        for i in range(4):
+        for i in range(len):
             temp = motor[i]
             temp = ca.if_else(temp > 1, 1,
                               ca.if_else(temp < 0, 0, temp))

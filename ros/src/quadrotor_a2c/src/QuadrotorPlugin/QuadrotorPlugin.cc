@@ -68,26 +68,26 @@ QuadrotorPlugin::~QuadrotorPlugin()
 // }
 
 /////////////////////////////////////////////////
-// bool QuadrotorPlugin::FindLink(const std::string &_sdfParam, sdf::ElementPtr _sdf,
-//     physics::LinkPtr &_link)
-// {
-//   // Read the required plugin parameters.
-//   if (!_sdf->HasElement(_sdfParam))
-//   {
-//     gzerr << "Unable to find the <" << _sdfParam << "> parameter." << std::endl;
-//     return false;
-//   }
+bool QuadrotorPlugin::FindLink(const std::string &_sdfParam, sdf::ElementPtr _sdf,
+    physics::LinkPtr &_link)
+{
+  // Read the required plugin parameters.
+  if (!_sdf->HasElement(_sdfParam))
+  {
+    gzerr << "Unable to find the <" << _sdfParam << "> parameter." << std::endl;
+    return false;
+  }
 
-//   std::string linkName = _sdf->Get<std::string>(_sdfParam);
-//   _link = this->model->GetLink(linkName);
-//   if (!_link)
-//   {
-//     gzerr << "Failed to find link [" << linkName
-//           << "] aborting plugin load." << std::endl;
-//     return false;
-//   }
-//   return true;
-// }
+  std::string linkName = _sdf->Get<std::string>(_sdfParam);
+  _link = this->model->GetLink(linkName);
+  if (!_link)
+  {
+    gzerr << "Failed to find link [" << linkName
+          << "] aborting plugin load." << std::endl;
+    return false;
+  }
+  return true;
+}
 
 /////////////////////////////////////////////////
 void QuadrotorPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
@@ -96,9 +96,9 @@ void QuadrotorPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
   GZ_ASSERT(_sdf, "QuadrotorPlugin _sdf pointer is NULL");
   this->model = _model;
 
-  // if (!this->FindLink("body", _sdf, this->body)) {
-  //   GZ_ASSERT(false, "QuadrotorPlugin failed to find body");
-  // }
+  if (!this->FindLink("body", _sdf, this->body)) {
+    GZ_ASSERT(false, "QuadrotorPlugin failed to find body");
+  }
 
   // // Find body link to apply
   // for (int i=0; i<4; i++ ) {
@@ -160,8 +160,8 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
     // state
     // auto inertial = this->body->GetInertial();
     // double m = inertial->Mass();
-    auto vel_INE = this->body->RelativeLinearVel();       // inertial frame
-    auto omega_INE = this->body->RelativeAngularVel();    // inertial frame
+    auto vel_INE = this->body->WorldLinearVel();       // inertial frame
+    auto omega_INE = this->body->WorldAngularAccel();    // inertial frame
     auto pose = this->body->WorldPose();
     auto euler_INE = pose.Rot().Euler();                // return as quternion -> Euler
     auto pos_INE = pose.Pos();

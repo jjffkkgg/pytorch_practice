@@ -10,6 +10,7 @@ from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
 from quadrotor_traj import QuadRotorEnv 
+import params as par
 
 
 # In[2]:
@@ -22,16 +23,16 @@ device = torch.device("cuda" if use_cuda else "cpu")
 # In[3]:
 
 '''Global Variables'''
-GAMMA = 0.99                # 시간할인율
-NUM_EPISODES = 5000         # 최대 에피소드 수
+GAMMA = par.GAMMA                               # 시간할인율
+NUM_EPISODES = par.NUM_EPISODES                 # 최대 에피소드 수
 
-NUM_PROCESSES = 32          # 동시 실행 환경 수
-NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
+NUM_PROCESSES = par.NUM_PROCESSES               # 동시 실행 환경 수
+NUM_ADVANCED_STEP = par.NUM_ADVANCED_STEP       # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
 
-VALUE_LOSS_COEFF = 0.5
-ENTROPY_COEFF = 0.1        # Local min 에서 벗어나기 위한 엔트로피 상수
-MAX_GRAD_NORM = 0.5
-DELTA_T = 0.005
+VALUE_LOSS_COEFF = par.VALUE_LOSS_COEFF
+ENTROPY_COEFF = par.ENTROPY_COEFF               # Local min 에서 벗어나기 위한 엔트로피 상수
+MAX_GRAD_NORM = par.MAX_GRAD_NORM
+DELTA_T = par.DELTA_T
 
 # In[4]:
 
@@ -123,7 +124,7 @@ class Net(nn.Module):
 class Brain(object):
     def __init__(self, actor_critic: Net) -> None:
         self.actor_critic = actor_critic
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=0.0005)    # learning rate -> local minima control
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=par.learning_rate)    # learning rate -> local minima control
         
     def update(self, rollouts: RolloutStorage) -> None:
         ''''Advantage학습의 대상이 되는 5단계 모두를 사용하여 수정'''
@@ -178,7 +179,7 @@ class Environment:
         print(device)
         
         # 동시 실행할 환경 수 만큼 env를 생성
-        space_lim = [500, 500, 500]
+        space_lim = [500, 500, 500]         # [m]
         envs = [QuadRotorEnv(space_lim) for i in range(NUM_PROCESSES)]
 
         # 모든 에이전트가 공유하는 Brain 객체를 생성
@@ -189,19 +190,7 @@ class Environment:
         glob_brain = Brain(actor_critic)                # Brain init
 
         # 각종 정보를 저장하는 변수
-        l_arm = 0.4                             # length or the rotor arm [m]
-        m = 1                                # mass of vehicle [kg]
-        rho = 1.225                             # density of air [kg/m^3]
-        r = 0.1                                 # radius of propeller
-        V = 11.1                                # voltage of battery [V]
-        kV = 1550                               # motor kV constant, [rpm/V]
-        CT = 1.0e-2                             # Thrust coeff
-        Cm = 1e-4                               # moment coeff
-        g = 9.81                                # gravitational constant [m/s^2]
-        Jx = 0.021                              # Moment of inertia Ixx [kg*m^2]
-        Jy = 0.021                              # Moment of inertia Iyy [kg*m^2]
-        Jz = 0.042                              # Moment of inertia Izz [kg*m^2]
-        p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
+        p = par.p
         travel_time = arrive_time + hover_time
         obs_shape = n_in
         current_obs = torch.zeros(NUM_PROCESSES, obs_shape).to(device)                         # (16,4) 의 tensor
@@ -265,7 +254,7 @@ class Environment:
                             reward_np[i] = 10000.0
                         elif done_info_np[i,1]:
                             reward_np[i] = 5000.0
-                        elif each_step[i] <= 15:
+                        elif each_step[i] <= (1/DELTA_T)*0.15:
                             reward_np[i] = -10000
                         else:
                             reward_np[i] = -200
@@ -287,7 +276,7 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        reward_np[i] = 2-distance_np[i]
+                        reward_np[i] = 1-distance_np[i]
                         each_step[i] += 1           # 그대로 진행
                     reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                     masks = torch.cat((masks, mask_step), dim=0)   
@@ -334,12 +323,12 @@ class Environment:
             # 모든 환경이 성공(도착)
             if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
-                savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
+                savepath = "./python/test_system/quadrotor/trained_net/quadrotor.pth"
                 torch.save(actor_critic.state_dict(), savepath)
 
                 return obs_replay_buffer, distance_replay_buffer
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
-        savepath = "./test_system/quadrotor/trained_net/quadrotor.pth"
+        savepath = "./python/test_system/quadrotor/trained_net/quadrotor.pth"
         torch.save(actor_critic.state_dict(), savepath)
         return obs_replay_buffer, distance_replay_buffer
