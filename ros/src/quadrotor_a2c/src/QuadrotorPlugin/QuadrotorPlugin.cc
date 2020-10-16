@@ -154,7 +154,7 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
     const double Jy = 0.021;
     const double Jz = 0.042;
     const double Jxz = 0;
-    const double CD0 = 0.;
+    const double CD0 = 0;
     double p[14] = {m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz, Jxz, CD0};
 
     // state

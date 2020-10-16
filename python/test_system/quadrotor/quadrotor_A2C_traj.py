@@ -276,7 +276,7 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        reward_np[i] = 1-distance_np[i]
+                        reward_np[i] = 1 - distance_np[i] + (each_step[i]*(DELTA_T))
                         each_step[i] += 1           # 그대로 진행
                     reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                     masks = torch.cat((masks, mask_step), dim=0)   

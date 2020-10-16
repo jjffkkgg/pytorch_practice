@@ -8,6 +8,12 @@ import quadrotor_A2C_traj as train_model
 import numpy as np
 import params as par
 
+def update_lines(num, data, line):
+        # NOTE: there is no .set_data() for 3 dim data...
+        line.set_data(data[0:2, :num])
+        line.set_3d_properties(data[2, :num])
+        return line
+
 # In[2]
 
 if __name__ == '__main__':
@@ -19,12 +25,6 @@ if __name__ == '__main__':
     np.save('./python/test_system/quadrotor/trained_net/distance_data.npy', distance)
     
     t = np.arange(0,arrive_time + hover_time,par.DELTA_T)
-
-    def update_lines(num, data, line):
-        # NOTE: there is no .set_data() for 3 dim data...
-        line.set_data(data[0:2, :num])
-        line.set_3d_properties(data[2, :num])
-        return line
 
     # Attaching 3D axis to the figure
     fig1 = plt.figure(num = 1, figsize=(plt.figaspect(1)))
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     # Creating the Animation object
     line_ani = animation.FuncAnimation(fig1, update_lines, 25, fargs=(data_plot, line),
                                     interval=50, blit=False)
-    line_ani.save('./test_system/quadrotor/trained_net/flight.gif', writer='pillow', fps=60)
+    line_ani.save('./python/test_system/quadrotor/trained_net/flight.gif', writer='pillow', fps=60)
 
     
     fig2 = plt.figure(num = 2, figsize=(16,9))
@@ -99,6 +99,6 @@ if __name__ == '__main__':
     plt.ylabel('Distance [m]')
     plt.grid()
 
-    fig2.savefig('./test_system/quadrotor/trained_net/flight_data.png')
+    fig2.savefig('./python/test_system/quadrotor/trained_net/flight_data.png')
     
     plt.show()
