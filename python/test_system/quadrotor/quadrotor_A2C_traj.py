@@ -217,6 +217,11 @@ class Environment:
         obs = torch.from_numpy(obs).float()                     # (32,12) 의 tensor
         current_obs = obs                                       # current obs 의 업데이트
 
+        # Reference trajectory
+        ref_trajectory = np.linspace(np.array([0,0,0]), par.endpoint, int(par.arrive_time*(1/par.DELTA_T)))
+        for _ in range(int(par.hover_time * (1/par.DELTA_T))):
+            ref_trajectory = np.vstack((ref_trajectory, par.endpoint))
+
         # advanced 학습(action actor)에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
         rollouts.observations[0].copy_(current_obs)
 
@@ -257,17 +262,18 @@ class Environment:
                         elif each_step[i] <= (1/DELTA_T)*0.15:
                             reward_np[i] = -10000
                         else:
-                            reward_np[i] = -200
+                            reward_np[i] = -100
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
-                        print(f'slot_reward: {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'\
-                              f'done_point: x={round(obs_np[i][9],2)}m y={round(obs_np[i][10],2)}m z={round(obs_np[i][11],2)}m\n'
-                              f'distance: {round(distance_np[i,0],4)}m\n' 
-                              f'reward_mean: {round(reward_past_32.mean(),2)}\n'
-                              f'reward_max: {round(reward_past_32.max(),2)}'
+                        print(f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'\
+                              f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
+                              f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
+                              f'distance:       {round(distance_np[i,0],4)}m\n' 
+                              f'reward_mean:    {round(reward_past_32.mean(),2)}\n'
+                              f'reward_max:     {round(reward_past_32.max(),2)}'
                             #   f'reward_min: {round(reward_past_32.min(),2)}'
                               ) 
                         each_step[i] = 0                                        # step 초기화

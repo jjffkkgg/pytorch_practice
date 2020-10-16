@@ -26,6 +26,10 @@ if __name__ == '__main__':
     
     t = np.arange(0,arrive_time + hover_time,par.DELTA_T)
 
+    ref_trajectory = np.linspace(np.array([0,0,0]), par.endpoint, int(par.arrive_time*(1/par.DELTA_T)))
+    for _ in range(int(par.hover_time * (1/par.DELTA_T))):
+        ref_trajectory = np.vstack((ref_trajectory, par.endpoint))
+
     # Attaching 3D axis to the figure
     fig1 = plt.figure(num = 1, figsize=(plt.figaspect(1)))
     ax = Axes3D(fig1)
@@ -57,19 +61,24 @@ if __name__ == '__main__':
     fig2 = plt.figure(num = 2, figsize=(16,9))
     ax1 = fig2.add_subplot(2, 3, 1)
     plt.plot(data[0,:,9],
-                data[0,:,10])
+             data[0,:,10],
+             ref_trajectory[:,0],
+             ref_trajectory[:,1])
     plt.xlim(-10,10)
     plt.ylim(-10,10)
     plt.title('x-y Postition')
     plt.xlabel('X axis [m]')
     plt.ylabel('Y axis [m]')
+    plt.legend(['Flight','Reference Trajectory'])
     plt.grid()
     
     ax2 = fig2.add_subplot(2, 3, 2)
-    plt.plot(t,data[0,:,11])
+    plt.plot(t,data[0,:,11],
+             t,ref_trajectory[:,0])
     plt.title('Height')
     plt.xlabel('Time [s]')
     plt.ylabel('Height [m]')
+    plt.legend(['Flight','Reference Trajectory'])
     plt.grid()
 
     ax3 = fig2.add_subplot(2, 3, 3)
