@@ -209,7 +209,7 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, reward, done, np.array([arrive, arrive_turn]), distance
+        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance
 
     def reset(self, p, arrive_time: int, hover_time: int):
         '''reset the environment. (init state)'''
@@ -222,9 +222,7 @@ class QuadRotorEnv:
         # self.radius = 2 * self.p[1]
         self.time = arrive_time
         self.arr_hover_t = hover_time
-        self.trajectory = np.linspace(self.xi[9:12], self.endpoint, int(self.time*(1/DELTA_T)))
-        for _ in range(int(self.arr_hover_t * (1/DELTA_T))):
-            self.trajectory = np.vstack((self.trajectory, self.endpoint))
+        self.trajectory = par.ref_trajectory
 
         return self.xi
         

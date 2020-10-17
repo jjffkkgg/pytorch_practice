@@ -25,7 +25,7 @@ class Obstacle:
 
     def rand_wall_sq(self, end: np.array, num: int = 1) -> None:
         '''create random 1x1xrandZ obstacles'''
-        for i in range(num):
+        for _ in range(num):
             while True:
                 centerX = np.random.uniform(-(self.xlim-1),(self.xlim-1))
                 centerY = np.random.uniform(-(self.ylim-1),(self.ylim-1))

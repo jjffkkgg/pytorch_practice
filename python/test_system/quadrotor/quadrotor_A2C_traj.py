@@ -49,7 +49,8 @@ class RolloutStorage(object):
         self.returns = torch.zeros(num_steps + 1, num_processes, 1).to(device)
         self.index = 0              # insert 하는 index          
 
-    def insert(self, current_obs: tensor, action: tensor, reward: tensor, mask: FloatTensor) -> None:
+    def insert(self, current_obs: torch.Tensor, action: torch.Tensor,
+                 reward: torch.Tensor, mask: torch.FloatTensor) -> None:
         '''현재 인덱스 위치에 transition을 저장'''
         self.observations[self.index + 1].copy_(current_obs)        # torch.size([6, 32, 12])
         self.masks[self.index + 1].copy_(mask)
@@ -93,7 +94,7 @@ class Net(nn.Module):
 
         return critic_output, actor_output
     
-    def act(self, x) -> Tensor:
+    def act(self, x) -> torch.Tensor:
         '''상태 x로부터 행동을 확률적으로 결정'''
         value, actor_output = self(x)
         action_probs = F.softmax(actor_output, dim=1)       # softmax 를 통한 행동의 확률 계산
@@ -106,7 +107,7 @@ class Net(nn.Module):
 
         return value
     
-    def evaluate_actions(self, x: tensor, actions) -> list:
+    def evaluate_actions(self, x: torch.Tensor, actions) -> list:
         '''상태 x로부터 상태가치, 실제 행동 actions의 로그 확률, 엔트로피를 계산'''
         value, actor_output = self(x)
 
@@ -173,6 +174,13 @@ class Brain(object):
 # In[7]:
 
 class Environment:
+    def load_ckp(self, checkpoint_fpath, model, optimizer):
+        checkpoint = torch.load(checkpoint_fpath)
+        model.load_state_dict(checkpoint['state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+
+        return model, optimizer, checkpoint['episode']
+
     def run(self, arrive_time: int, hover_time: int) -> None:
         '''running entry point'''
         # print device
@@ -186,10 +194,19 @@ class Environment:
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
         n_mid = 192                                      # 384 mid junction
+        episode = 0
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
-        glob_brain = Brain(actor_critic)                # Brain init
+        glob_brain = Brain(actor_critic)                           # Brain init
 
-        # 각종 정보를 저장하는 변수
+        # Load saved model to resume learning (comment out to start new training)
+        ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+        actor_critic, glob_brain.optimizer, episode = self.load_ckp(
+            ckp_path, actor_critic, glob_brain.optimizer)
+
+        msg = 'Please change NUM_EPISODES to bigger than previous: %i' % episode
+        assert (episode < NUM_EPISODES), msg
+
+        # Initialization of variables
         p = par.p
         travel_time = arrive_time + hover_time
         obs_shape = n_in
@@ -201,15 +218,16 @@ class Environment:
         reward_np = np.zeros([NUM_PROCESSES, 1])                                    # 보상의 배열
         reward_past_32 = np.zeros(32)                                               # 32개 보상의 평균
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
-        done_info_np = np.zeros([NUM_PROCESSES, 2])                                    # Arrive 여부의 배열
+        done_info_np = np.zeros([NUM_PROCESSES, 2])                                 # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
+        input_np = np.zeros([NUM_PROCESSES, 4])
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
-        obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 12])          # state 저장 버퍼
+        obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), obs_shape])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
         reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
+        input_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 4])         # input save buffer
         obs_step = np.zeros([NUM_PROCESSES, 12])
         distance_step = np.zeros([NUM_PROCESSES, 1])
-        episode = 0
 
         # 초기 state...
         obs = [envs[i].reset(p, arrive_time, hover_time) for i in range(NUM_PROCESSES)]
@@ -218,15 +236,13 @@ class Environment:
         current_obs = obs                                       # current obs 의 업데이트
 
         # Reference trajectory
-        ref_trajectory = np.linspace(np.array([0,0,0]), par.endpoint, int(par.arrive_time*(1/par.DELTA_T)))
-        for _ in range(int(par.hover_time * (1/par.DELTA_T))):
-            ref_trajectory = np.vstack((ref_trajectory, par.endpoint))
+        ref_trajectory = par.ref_trajectory
 
         # advanced 학습(action actor)에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
         rollouts.observations[0].copy_(current_obs)
 
         # 에피소드 반복문
-        for episode in range(NUM_EPISODES):
+        while episode <= NUM_EPISODES:
             # advanced 학습(action actor) 대상이 되는 각 단계에 대해 계산 (step 반복)
             for step in range(NUM_ADVANCED_STEP):
                 # action 을 fetch
@@ -241,12 +257,13 @@ class Environment:
                 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
+                    obs_np[i], input_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
                     # train data 의 저장 -> reward & replay 위함
                     obs_step[i] = obs_np[i]
                     distance_step[i] = distance_np[i]
+                    input_replay_buffer[i, int(each_step[i])] = input_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
                     distance_replay_buffer[i,int(each_step[i])] = distance_np[i]
 
@@ -329,12 +346,25 @@ class Environment:
             # 모든 환경이 성공(도착)
             if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
-                savepath = "./python/test_system/quadrotor/trained_net/quadrotor.pth"
-                torch.save(actor_critic.state_dict(), savepath)
+                savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+                checkpoint = {
+                    'episode': episode + 1,
+                    'state_dict': actor_critic.state_dict(),
+                    'optimizer': glob_brain.optimizer.state_dict()
+                }
+                torch.save(checkpoint, savepath)
 
-                return obs_replay_buffer, distance_replay_buffer
+                return obs_replay_buffer, distance_replay_buffer, input_replay_buffer
+            
+            episode += 1
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
-        savepath = "./python/test_system/quadrotor/trained_net/quadrotor.pth"
-        torch.save(actor_critic.state_dict(), savepath)
-        return obs_replay_buffer, distance_replay_buffer
+        savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+        checkpoint = {
+                    'episode': episode + 1,
+                    'state_dict': actor_critic.state_dict(),
+                    'optimizer': glob_brain.optimizer.state_dict()
+                }
+        torch.save(checkpoint, savepath)
+
+        return obs_replay_buffer, distance_replay_buffer, input_replay_buffer
