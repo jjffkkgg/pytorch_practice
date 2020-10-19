@@ -18,7 +18,7 @@ p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
 
 '''Learning Variables'''
 GAMMA = 0.9999                # 시간할인율
-NUM_EPISODES = 400         # 최대 에피소드 수
+NUM_EPISODES = 10000         # 최대 에피소드 수
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -30,7 +30,7 @@ DELTA_T = 0.01
 learning_rate = 0.0001
 
 ''' Trajectory '''
-startpoint = np.array([0,0,0])
+startpoint = np.array([0,0,10])
 endpoint = np.array([5, 5, 30])
 arrive_time = 30
 hover_time = 2

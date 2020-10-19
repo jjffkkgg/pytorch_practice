@@ -214,6 +214,7 @@ class QuadRotorEnv:
     def reset(self, p, arrive_time: int, hover_time: int):
         '''reset the environment. (init state)'''
         self.xi = [0] * 12
+        self.xi[9:12] = par.startpoint
         self.steps_beyond_done = None
         self.p = p
         self.hover_thrust = comp.throttle(p[0]*p[8],p[3],p[2],p[4],p[5],p[6],p[7])

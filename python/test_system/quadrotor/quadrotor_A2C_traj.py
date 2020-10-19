@@ -222,6 +222,7 @@ class Environment:
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
         input_np = np.zeros([NUM_PROCESSES, 4])
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
+        step_replay_buffer = np.zeros(NUM_PROCESSES)
         obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), obs_shape])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
         reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
@@ -266,17 +267,18 @@ class Environment:
                     input_replay_buffer[i, int(each_step[i])] = input_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
                     distance_replay_buffer[i,int(each_step[i])] = distance_np[i]
+                    step_replay_buffer[i] = each_step[i]
 
                     # episode의 종료가치, state_next를 설정
                     if done_np[i]:          # success or fail
                         mask_step = torch.FloatTensor([[1.0]])
                         print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
-                        if done_info_np[i,0]:    # done with arrival
+                        if done_info_np[i,0]:                               # done with arrival
                             masks_arrive_step= torch.FloatTensor([[1.0]])
                             reward_np[i] = 10000.0
-                        elif done_info_np[i,1]:
+                        elif done_info_np[i,1]:                             # done with turn
                             reward_np[i] = 5000.0
-                        elif each_step[i] <= (1/DELTA_T)*0.15:
+                        elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
                             reward_np[i] = -10000
                         else:
                             reward_np[i] = -100
@@ -348,23 +350,33 @@ class Environment:
                 print('모든 환경 성공')
                 savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
                 checkpoint = {
-                    'episode': episode + 1,
+                    'episode': episode,
                     'state_dict': actor_critic.state_dict(),
                     'optimizer': glob_brain.optimizer.state_dict()
                 }
                 torch.save(checkpoint, savepath)
 
-                return obs_replay_buffer, distance_replay_buffer, input_replay_buffer
+                return {
+                    'obs': obs_replay_buffer,
+                    'dist': distance_replay_buffer,
+                    'input': input_replay_buffer,
+                    'step': each_step
+                }
             
             episode += 1
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
         savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
         checkpoint = {
-                    'episode': episode + 1,
+                    'episode': episode,
                     'state_dict': actor_critic.state_dict(),
                     'optimizer': glob_brain.optimizer.state_dict()
                 }
         torch.save(checkpoint, savepath)
 
-        return obs_replay_buffer, distance_replay_buffer, input_replay_buffer
+        return {
+                'obs': obs_replay_buffer,
+                'dist': distance_replay_buffer,
+                'input': input_replay_buffer,
+                'step': each_step
+            }
