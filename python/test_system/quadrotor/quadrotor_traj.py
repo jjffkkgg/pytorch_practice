@@ -5,6 +5,7 @@ from computation import Computation as comp
 from test_space import Obstacle
 import warnings
 import params as par
+import itertools
 
 '''GLOBAL VARIABLE'''
 DELTA_T = par.DELTA_T 
@@ -13,18 +14,48 @@ class QuadRotorEnv:
 
     def __init__(self, lim: list) -> None:
         # init of system config
-        arm_angles_deg = [45, -135, -45, 135]
-        arm_angles_rad = [
-            (np.pi / 180) * i for i in arm_angles_deg
-            ]
-        motor_dirs = [1, 1, -1, -1]             # motor rotation direction
+        arm_angles_deg = par.arm_angles_deg
+        arm_angles_rad = par.arm_angles_rad
+        motor_dirs = par.motor_dirs            # motor rotation direction
 
-        # control input per step(DELTA_T (s))
-        self.action_roll = par.action_roll               # [V]
-        self.action_pitch = par.action_pitch
-        self.action_yaw = par.action_yaw
-        self.action_thrust = par.action_thrust
+        # control input dictionary(DELTA_T (s))
         self.steps_beyond_done = None
+
+        action_roll = np.array([par.action_roll,0,0,0])
+        action_pitch = np.array([0,par.action_pitch,0,0])
+        action_yaw = np.array([0,0,par.action_yaw,0])
+        action_thrust = np.array([0,0,0,par.action_thrust])
+        actions = np.vstack((action_roll, 
+                        action_pitch, 
+                        action_yaw, 
+                        action_thrust, 
+                        -action_roll, 
+                        -action_pitch, 
+                        -action_yaw, 
+                        -action_thrust
+                        ))
+        action_array = np.zeros(4)
+        self.action_dic = {}
+        for i in range(actions.shape[0]):
+            for j in range(len(list(itertools.combinations(actions, i+1)))):
+                action_array = np.vstack((
+                    action_array,
+                    sum(list(itertools.combinations(actions, i+1))[j])
+                    ))
+        action_array = np.unique(action_array, axis=0)
+        
+        for k in range(len(action_array)):
+            self.action_dic[k] = action_array[k]
+        # self.action_dic = {
+        #     0: -action_roll,
+        #     1: -action_pitch,
+        #     2: -action_yaw,
+        #     3: -action_thrust,
+        #     4: action_roll,
+        #     5: action_pitch,
+        #     6: action_yaw,
+        #     7: action_thrust
+        #     }
 
         # state limit of system
         self.done_threshold = [
@@ -36,10 +67,9 @@ class QuadRotorEnv:
 
         # start - end
         self.endpoint = par.endpoint   # [m]
-        # self.arrivetime = 0.0                   # [s]
         
-        self.observation_space_size = 12    # size of state space
-        self.action_space_size = 8          # size of action space
+        self.observation_space_size = 12                      # size of state space
+        self.action_space_size = len(self.action_dic)         # size of action space
 
         # defining test space
         # self.test_space = Obstacle(lim)
@@ -110,29 +140,16 @@ class QuadRotorEnv:
 
     def step(self, action: int, step, dt=DELTA_T):
         '''calculate state after step input'''
-        action_roll = np.array([self.action_roll,0,0,0])
-        action_pitch = np.array([0,self.action_pitch,0,0])
-        action_yaw = np.array([0,0,self.action_yaw,0])
-        action_thrust = np.array([0,0,0,self.action_thrust])
-        action_dic = {
-            0: -action_roll,
-            1: -action_pitch,
-            2: -action_yaw,
-            3: -action_thrust,
-            4: action_roll,
-            5: action_pitch,
-            6: action_yaw,
-            7: action_thrust
-            }
+
         err_msg = "%r (%s) invalid" % (action, type(action))
-        assert (action in action_dic), err_msg                   # throw error if action not in bound
+        assert (action in self.action_dic), err_msg                   # throw error if action not in bound
 
         # init vars
         reward = 0.0
         done = False
         arrive = False
         arrive_turn = False
-        self.u += action_dic[action]
+        self.u += self.action_dic[action]
 
         # calculate next step state
         res = scipy.integrate.solve_ivp(

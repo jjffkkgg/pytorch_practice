@@ -82,7 +82,7 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.fc1 = nn.Linear(n_in,n_mid)
         self.fc2 = nn.Linear(n_mid,n_mid)
-        self.actor = nn.Linear(n_mid, n_out)        # Actor net(8 action output)
+        self.actor = nn.Linear(n_mid, n_out)        # Actor net(81 action output)
         self.critic = nn.Linear(n_mid, 1)           # critic net (state value -> 1)
     
     def forward(self, x) -> list:
@@ -193,15 +193,16 @@ class Environment:
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
-        n_mid = 192                                      # 384 mid junction
+        n_mid = 3888                                      # 3888 mid junction
         episode = 0
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                           # Brain init
 
         # Load saved model to resume learning (comment out to start new training)
-        ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
-        actor_critic, glob_brain.optimizer, episode = self.load_ckp(
-            ckp_path, actor_critic, glob_brain.optimizer)
+        if par.is_resume:
+            ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+            actor_critic, glob_brain.optimizer, episode = self.load_ckp(
+                ckp_path, actor_critic, glob_brain.optimizer)
 
         msg = 'Please change NUM_EPISODES to bigger than previous: %i' % episode
         assert (episode < NUM_EPISODES), msg
@@ -279,7 +280,9 @@ class Environment:
                         elif done_info_np[i,1]:                             # done with turn
                             reward_np[i] = 5000.0
                         elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
-                            reward_np[i] = -10000
+                            reward_np[i] = -100000
+                        # elif np.linalg.norm(obs_np[i][9:12]-par.startpoint) <= 0.5:
+                        #     reward_np[i] = -100000
                         else:
                             reward_np[i] = -100
                             obs_replay_buffer[i] = 0

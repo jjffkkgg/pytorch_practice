@@ -16,9 +16,14 @@ Jy = 0.021                              # Moment of inertia Iyy [kg*m^2]
 Jz = 0.042                              # Moment of inertia Izz [kg*m^2]
 p = [m, l_arm, r, rho, V, kV, CT, Cm, g, Jx, Jy, Jz]
 
+arm_angles_deg = [45, -135, -45, 135]
+arm_angles_rad = [(np.pi / 180) * i for i in arm_angles_deg]
+motor_dirs = [1, 1, -1, -1] 
+
 '''Learning Variables'''
-GAMMA = 0.9999                # 시간할인율
-NUM_EPISODES = 10000         # 최대 에피소드 수
+GAMMA = 0.999                # 시간할인율
+NUM_EPISODES = 4000         # 최대 에피소드 수
+is_resume = False
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -27,12 +32,12 @@ VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.1         # Local min 에서 벗어나기 위한 엔트로피 상수
 MAX_GRAD_NORM = 0.5
 DELTA_T = 0.01
-learning_rate = 0.0001
+learning_rate = 0.00001
 
 ''' Trajectory '''
-startpoint = np.array([0,0,10])
-endpoint = np.array([5, 5, 30])
-arrive_time = 30
+startpoint = np.array([0,0,5])
+endpoint = np.array([0,0,30])
+arrive_time = 20
 hover_time = 2
 time = np.arange(0, arrive_time + hover_time, DELTA_T)
 ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
@@ -41,7 +46,7 @@ for _ in range(int(hover_time * (1/DELTA_T))):
 
 '''Action control'''
 off_dist = 3    # [m]
-action_roll = 0.001               # [V]
-action_pitch = 0.001
-action_yaw = 0.001
-action_thrust = 0.01
+action_roll = 0.0001               # [V]
+action_pitch = 0.0001
+action_yaw = 0.0001
+action_thrust = 0.005
