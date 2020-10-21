@@ -193,7 +193,7 @@ class Environment:
         # 모든 에이전트가 공유하는 Brain 객체를 생성
         n_in = envs[0].observation_space_size           # state inputs
         n_out = envs[0].action_space_size               # action outpus
-        n_mid = 3888                                      # 3888 mid junction
+        n_mid = n_in * n_out                            # 972(12*81) mid junction
         episode = 0
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                           # Brain init
@@ -221,11 +221,13 @@ class Environment:
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                 # Arrive 여부의 배열
         distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
+        vel_dot_np = np.zeros([NUM_PROCESSES, 1])
         input_np = np.zeros([NUM_PROCESSES, 4])
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
         step_replay_buffer = np.zeros(NUM_PROCESSES)
         obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), obs_shape])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
+        vel_dot_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])
         reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
         input_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 4])         # input save buffer
         obs_step = np.zeros([NUM_PROCESSES, 12])
@@ -259,7 +261,8 @@ class Environment:
                 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], input_np[i], reward_np[i], done_np[i], done_info_np[i], distance_np[i]\
+                    obs_np[i], input_np[i], reward_np[i], done_np[i],\
+                    done_info_np[i], distance_np[i], vel_dot_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
                     # train data 의 저장 -> reward & replay 위함
@@ -268,6 +271,7 @@ class Environment:
                     input_replay_buffer[i, int(each_step[i])] = input_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
                     distance_replay_buffer[i,int(each_step[i])] = distance_np[i]
+                    vel_dot_replay_buffer[i,int(each_step[i])] = vel_dot_np[i]
                     step_replay_buffer[i] = each_step[i]
 
                     # episode의 종료가치, state_next를 설정
@@ -287,6 +291,7 @@ class Environment:
                             reward_np[i] = -100
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
+                            vel_dot_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
@@ -304,7 +309,11 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        reward_np[i] = 1 - distance_np[i] + (each_step[i]*(DELTA_T))
+                        distance_dot = (distance_replay_buffer[i,each_step[i]] 
+                                        - distance_replay_buffer[i,each_step[i]-1])\
+                                        / DELTA_T
+                        reward_np[i] = 10*vel_dot_np[i] - abs(distance_dot)
+                        reward_np[i] = vel_dot_np[i]
                         each_step[i] += 1           # 그대로 진행
                     reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                     masks = torch.cat((masks, mask_step), dim=0)   
@@ -363,7 +372,8 @@ class Environment:
                     'obs': obs_replay_buffer,
                     'dist': distance_replay_buffer,
                     'input': input_replay_buffer,
-                    'step': each_step
+                    'step': each_step,
+                    'vel_dot': vel_dot_replay_buffer
                 }
             
             episode += 1
@@ -381,5 +391,6 @@ class Environment:
                 'obs': obs_replay_buffer,
                 'dist': distance_replay_buffer,
                 'input': input_replay_buffer,
-                'step': each_step
+                'step': each_step,
+                'vel_dot': vel_dot_replay_buffer
             }

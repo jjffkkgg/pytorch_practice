@@ -21,41 +21,46 @@ class QuadRotorEnv:
         # control input dictionary(DELTA_T (s))
         self.steps_beyond_done = None
 
+        action_nothing = np.zeros(4)
         action_roll = np.array([par.action_roll,0,0,0])
         action_pitch = np.array([0,par.action_pitch,0,0])
         action_yaw = np.array([0,0,par.action_yaw,0])
         action_thrust = np.array([0,0,0,par.action_thrust])
-        actions = np.vstack((action_roll, 
-                        action_pitch, 
-                        action_yaw, 
-                        action_thrust, 
-                        -action_roll, 
-                        -action_pitch, 
-                        -action_yaw, 
-                        -action_thrust
-                        ))
-        action_array = np.zeros(4)
-        self.action_dic = {}
-        for i in range(actions.shape[0]):
-            for j in range(len(list(itertools.combinations(actions, i+1)))):
-                action_array = np.vstack((
-                    action_array,
-                    sum(list(itertools.combinations(actions, i+1))[j])
-                    ))
-        action_array = np.unique(action_array, axis=0)
-        
-        for k in range(len(action_array)):
-            self.action_dic[k] = action_array[k]
-        # self.action_dic = {
-        #     0: -action_roll,
-        #     1: -action_pitch,
-        #     2: -action_yaw,
-        #     3: -action_thrust,
-        #     4: action_roll,
-        #     5: action_pitch,
-        #     6: action_yaw,
-        #     7: action_thrust
-        #     }
+
+        # Action dictionary generation
+        # actions = np.vstack((action_roll, 
+        #                 action_pitch, 
+        #                 action_yaw, 
+        #                 action_thrust, 
+        #                 -action_roll, 
+        #                 -action_pitch, 
+        #                 -action_yaw, 
+        #                 -action_thrust
+        #                 ))
+        # action_array = np.zeros(4)
+        # self.action_dic = {}
+        # for i in range(actions.shape[0]):
+        #     for j in range(len(list(itertools.combinations(actions, i+1)))):
+        #         action_array = np.vstack((
+        #             action_array,
+        #             sum(list(itertools.combinations(actions, i+1))[j])
+        #             ))
+        # action_array = np.unique(action_array, axis=0)
+        # 
+        # for k in range(len(action_array)):
+        #     self.action_dic[k] = action_array[k]
+
+        self.action_dic = {
+            0: -action_roll,
+            1: -action_pitch,
+            2: -action_yaw,
+            3: -action_thrust,
+            4: action_roll,
+            5: action_pitch,
+            6: action_yaw,
+            7: action_thrust,
+            8: action_nothing
+            }
 
         # state limit of system
         self.done_threshold = [
@@ -108,7 +113,7 @@ class QuadRotorEnv:
         # forces and moments
         C_bn = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
         F_b = ca.vertcat(0, 0, 0)
-        F_b = ca.mtimes(C_bn.T, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+        F_b = ca.mtimes(C_bn, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
         M_b = ca.SX.zeros(3)                                          # Body moment(torque) Initialize
         u_motor = comp.saturate(
             comp.mix2motor(u_mix), len(motor_dirs)
@@ -132,10 +137,10 @@ class QuadRotorEnv:
         # Equation of Motion of system
         self.rhs = ca.Function('rhs',[x,u_mix,p],[ca.vertcat(
             ca.mtimes(ca.inv(J_b),
-                      M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (angular acceleration)
-            F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (acceleration)
+                      M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (body angular acceleration)
+            F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (body acceleration)
             comp.euler_kinematics(euler,omega_b),                                       # omega (angular velocity) (inertial)
-            ca.mtimes(C_bn, vel_b),                                                     # v (velocity) (inertial)
+            ca.mtimes(C_bn.T, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
     def step(self, action: int, step, dt=DELTA_T):
@@ -168,7 +173,15 @@ class QuadRotorEnv:
         self.t += dt
 
         # calculate distance to endpoint
-        distance = np.linalg.norm(self.xi[9:12] - self.trajectory[step + 1])
+        distance_vect = self.trajectory[step + 1] - self.xi[9:12]
+        distance = np.linalg.norm(distance_vect)
+        euler = self.xi[6:9]
+        C_bn = comp.euler_to_dcm(euler)
+        vel_n = ca.mtimes(C_bn.T, self.xi[3:6])
+        vel_n_hat = np.linalg.norm(vel_n)
+        vel_dot = np.dot(distance_vect/distance, vel_n/vel_n_hat)           # minimum = -1, maximum = +1
+        # vel_diff_vect = distance_vect - ca.mtimes(C_bn.T, self.xi[3:6])
+        # vel_diff = np.linalg.norm(vel_diff_vect)
         
         # done by ground crash
         if self.xi[11] <= 0 and step >= 0.1*(1/DELTA_T):
@@ -226,7 +239,7 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance
+        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance, vel_dot
 
     def reset(self, p, arrive_time: int, hover_time: int):
         '''reset the environment. (init state)'''

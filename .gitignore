@@ -44,3 +44,5 @@ source.dot
 
 # Pytorch Net
 .pth
+python/test_system/quadrotor/trained_net/A2C_quadrotor.pth
+python/test_system/quadrotor/trained_net/dot product method/A2C_quadrotor.pth
