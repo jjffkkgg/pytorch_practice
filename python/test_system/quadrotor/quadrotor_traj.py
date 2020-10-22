@@ -178,9 +178,9 @@ class QuadRotorEnv:
         euler = self.xi[6:9]
         C_bn = comp.euler_to_dcm(euler)
         vel_n = ca.mtimes(C_bn.T, self.xi[3:6])
-        vel_n_hat = np.linalg.norm(vel_n)
-        vel_dot = np.dot(distance_vect/distance, vel_n/vel_n_hat)           # minimum = -1, maximum = +1
-        # vel_diff_vect = distance_vect - ca.mtimes(C_bn.T, self.xi[3:6])
+        # vel_n_size = np.linalg.norm(vel_n)
+        # vel_dot = np.dot(distance_vect/distance, vel_n/vel_n_size)           # minimum = -1, maximum = +1
+        # vel_diff_vect = distance_vect - vel_n
         # vel_diff = np.linalg.norm(vel_diff_vect)
         
         # done by ground crash
@@ -239,7 +239,7 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance, vel_dot
+        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance_vect, vel_n.T
 
     def reset(self, p, arrive_time: int, hover_time: int):
         '''reset the environment. (init state)'''

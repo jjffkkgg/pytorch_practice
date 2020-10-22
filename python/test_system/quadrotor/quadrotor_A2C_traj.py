@@ -220,18 +220,18 @@ class Environment:
         reward_past_32 = np.zeros(32)                                               # 32개 보상의 평균
         done_np = np.zeros([NUM_PROCESSES, 1])                                      # Done 여부의 배열
         done_info_np = np.zeros([NUM_PROCESSES, 2])                                 # Arrive 여부의 배열
-        distance_np = np.zeros([NUM_PROCESSES, 1])                                  # check distance array
-        vel_dot_np = np.zeros([NUM_PROCESSES, 1])
+        distance_vect_np = np.zeros([NUM_PROCESSES, 3])                                  # check distance array
+        vel_vect_np = np.zeros([NUM_PROCESSES, 3])
         input_np = np.zeros([NUM_PROCESSES, 4])
         each_step = np.zeros(NUM_PROCESSES, dtype=int)                                         # 각 env 의 step record
         step_replay_buffer = np.zeros(NUM_PROCESSES)
         obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), obs_shape])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
-        vel_dot_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])
         reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
         input_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 4])         # input save buffer
         obs_step = np.zeros([NUM_PROCESSES, 12])
-        distance_step = np.zeros([NUM_PROCESSES, 1])
+        distance_step = np.zeros([NUM_PROCESSES])
+        vel_n_step = np.zeros([NUM_PROCESSES])
 
         # 초기 state...
         obs = [envs[i].reset(p, arrive_time, hover_time) for i in range(NUM_PROCESSES)]
@@ -262,16 +262,16 @@ class Environment:
                 # process 반복
                 for i in range(NUM_PROCESSES):
                     obs_np[i], input_np[i], reward_np[i], done_np[i],\
-                    done_info_np[i], distance_np[i], vel_dot_np[i]\
+                    done_info_np[i], distance_vect_np[i], vel_vect_np[i]\
                        = envs[i].step(actions[i], each_step[i])
 
                     # train data 의 저장 -> reward & replay 위함
                     obs_step[i] = obs_np[i]
-                    distance_step[i] = distance_np[i]
+                    distance_step[i] = np.linalg.norm(distance_vect_np[i])
+                    vel_n_step[i] = np.linalg.norm(vel_vect_np[i])
                     input_replay_buffer[i, int(each_step[i])] = input_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
-                    distance_replay_buffer[i,int(each_step[i])] = distance_np[i]
-                    vel_dot_replay_buffer[i,int(each_step[i])] = vel_dot_np[i]
+                    distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
                     step_replay_buffer[i] = each_step[i]
 
                     # episode의 종료가치, state_next를 설정
@@ -291,14 +291,14 @@ class Environment:
                             reward_np[i] = -100
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
-                            vel_dot_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
+                        reward_replay_buffer[i, int(each_step[i])]
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
-                        print(f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'\
+                        print(f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]].mean(),4)}\n'\
                               f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
                               f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
-                              f'distance:       {round(distance_np[i,0],4)}m\n' 
+                              f'distance:       {round(distance_step[i],4)}m\n' 
                               f'reward_mean:    {round(reward_past_32.mean(),2)}\n'
                               f'reward_max:     {round(reward_past_32.max(),2)}'
                             #   f'reward_min: {round(reward_past_32.min(),2)}'
@@ -309,13 +309,18 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        distance_dot = (distance_replay_buffer[i,each_step[i]] 
-                                        - distance_replay_buffer[i,each_step[i]-1])\
-                                        / DELTA_T
-                        reward_np[i] = 10*vel_dot_np[i] - abs(distance_dot)
-                        reward_np[i] = vel_dot_np[i]
+                        # distance_dot = (distance_replay_buffer[i,each_step[i]] 
+                        #                 - distance_replay_buffer[i,each_step[i]-1])\
+                        #                 / DELTA_T
+                        vel_n_hat = vel_vect_np[i] / vel_n_step[i]
+                        distance_hat = distance_vect_np[i] / distance_step[i]
+
+                        # reward_np[i] = 10 - np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])
+                        reward_np[i] = np.clip(1/(np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])),0,1000)
+                        # reward_np[i] = np.dot(distance_hat, vel_n_hat) *\
+                        #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
                         each_step[i] += 1           # 그대로 진행
-                    reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                        reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                     masks = torch.cat((masks, mask_step), dim=0)   
                     masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
 
@@ -373,7 +378,7 @@ class Environment:
                     'dist': distance_replay_buffer,
                     'input': input_replay_buffer,
                     'step': each_step,
-                    'vel_dot': vel_dot_replay_buffer
+                    'reward': reward_replay_buffer
                 }
             
             episode += 1
@@ -392,5 +397,5 @@ class Environment:
                 'dist': distance_replay_buffer,
                 'input': input_replay_buffer,
                 'step': each_step,
-                'vel_dot': vel_dot_replay_buffer
+                'reward': reward_replay_buffer
             }

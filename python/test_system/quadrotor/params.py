@@ -22,7 +22,7 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 3000         # 최대 에피소드 수
+NUM_EPISODES = 500         # 최대 에피소드 수
 is_resume = False
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
