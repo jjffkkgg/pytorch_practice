@@ -22,8 +22,8 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 500         # 최대 에피소드 수
-is_resume = False
+NUM_EPISODES = 1500         # 최대 에피소드 수
+is_resume = True
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수

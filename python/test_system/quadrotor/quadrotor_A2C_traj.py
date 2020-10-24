@@ -227,6 +227,8 @@ class Environment:
         step_replay_buffer = np.zeros(NUM_PROCESSES)
         obs_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), obs_shape])          # state 저장 버퍼
         distance_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])         # 거리 저장 버퍼
+        distance_vect_replay_buffer = np.zeros([NUM_PROCESSES, 3, int(travel_time*(1/DELTA_T))])
+        vel_vect_replay_buffer = np.zeros([NUM_PROCESSES, 3, int(travel_time*(1/DELTA_T))])
         reward_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T))])           # 보상 저장 버퍼
         input_replay_buffer = np.zeros([NUM_PROCESSES, int(travel_time*(1/DELTA_T)), 4])         # input save buffer
         obs_step = np.zeros([NUM_PROCESSES, 12])
@@ -272,6 +274,8 @@ class Environment:
                     input_replay_buffer[i, int(each_step[i])] = input_np[i]
                     obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
                     distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
+                    distance_vect_replay_buffer[i, :, int(each_step[i])] = distance_vect_np[i]
+                    vel_vect_replay_buffer[i,:,int(each_step[i])] = vel_vect_np[i]
                     step_replay_buffer[i] = each_step[i]
 
                     # episode의 종료가치, state_next를 설정
@@ -291,6 +295,8 @@ class Environment:
                             reward_np[i] = -100
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
+                            distance_vect_replay_buffer[i] = 0
+                            vel_vect_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
                         reward_replay_buffer[i, int(each_step[i])]
                         reward_past_32 = np.hstack((reward_past_32[1:],
@@ -309,14 +315,22 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-                        # distance_dot = (distance_replay_buffer[i,each_step[i]] 
-                        #                 - distance_replay_buffer[i,each_step[i]-1])\
-                        #                 / DELTA_T
-                        vel_n_hat = vel_vect_np[i] / vel_n_step[i]
-                        distance_hat = distance_vect_np[i] / distance_step[i]
+                        
+                        # vel_vector diff acceleration model
+                        vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
+                                                vel_vect_replay_buffer[i,:,each_step[i]])
+                        vel_diff_past = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]-1] - 
+                                                vel_vect_replay_buffer[i,:,each_step[i]-1])
+                        vel_diff_dot = (vel_diff_current - vel_diff_past) / DELTA_T
+                        reward_np[i] = -vel_diff_dot
 
+                        # vel_diff minimize model
                         # reward_np[i] = 10 - np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])
-                        reward_np[i] = np.clip(1/(np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])),0,1000)
+                        # reward_np[i] = np.clip(1/(np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])),0,1000)
+
+                        # vel_diff dot product model
+                        # vel_n_hat = vel_vect_np[i] / vel_n_step[i]
+                        # distance_hat = distance_vect_np[i] / distance_step[i]
                         # reward_np[i] = np.dot(distance_hat, vel_n_hat) *\
                         #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
                         each_step[i] += 1           # 그대로 진행
