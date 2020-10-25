@@ -292,7 +292,7 @@ class Environment:
                         # elif np.linalg.norm(obs_np[i][9:12]-par.startpoint) <= 0.5:
                         #     reward_np[i] = -100000
                         else:
-                            reward_np[i] = -100
+                            reward_np[i] = each_step[i] * DELTA_T
                             obs_replay_buffer[i] = 0
                             distance_replay_buffer[i] = 0
                             distance_vect_replay_buffer[i] = 0
@@ -315,6 +315,9 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
+
+                        # original
+                        # reward_np[i] = 0
                         
                         # vel_vector diff acceleration model
                         vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
