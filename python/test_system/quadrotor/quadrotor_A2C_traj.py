@@ -289,15 +289,12 @@ class Environment:
                             reward_np[i] = 5000.0
                         elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
                             reward_np[i] = -100000
-                        # elif np.linalg.norm(obs_np[i][9:12]-par.startpoint) <= 0.5:
+                        # elif distance_step[i] <= 0.5:
                         #     reward_np[i] = -100000
                         else:
                             reward_np[i] = each_step[i] * DELTA_T
-                            obs_replay_buffer[i] = 0
-                            distance_replay_buffer[i] = 0
-                            distance_vect_replay_buffer[i] = 0
-                            vel_vect_replay_buffer[i] = 0
                             masks_arrive_step = torch.FloatTensor([[0.0]])
+
                         reward_replay_buffer[i, int(each_step[i])]
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
@@ -312,6 +309,10 @@ class Environment:
                         each_step[i] = 0                                        # step 초기화
                         obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
                         reward_replay_buffer[i] = 0
+                        obs_replay_buffer[i] = 0
+                        distance_replay_buffer[i] = 0
+                        distance_vect_replay_buffer[i] = 0
+                        vel_vect_replay_buffer[i] = 0
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
