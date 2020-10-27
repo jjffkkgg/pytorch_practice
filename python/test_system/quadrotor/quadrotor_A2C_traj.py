@@ -290,15 +290,17 @@ class Environment:
                         elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
                             reward_np[i] = -100000
                         elif np.linalg.norm(obs_np[i,9:12] - par.startpoint) <= 0.5:
-                            reward_np[i] = -100000
+                            reward_np[i] = -10000000
                         else:
-                            reward_np[i] = each_step[i] * DELTA_T * 5
+                            reward_replay_buffer[i, each_step[i]] = -10
+                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean() * each_step[i] * DELTA_T
                             masks_arrive_step = torch.FloatTensor([[0.0]])
 
-                        reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                        # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                         reward_past_32 = np.hstack((reward_past_32[1:],
                                                     reward_replay_buffer[i,:each_step[i]+1].mean()))
-                        print(f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]].mean(),4)}\n'\
+                        print(f'slot_reward:    {round(reward_np[i,0],4)}\n'
+                              # f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
                               f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
                               f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
                               f'distance:       {round(distance_step[i],4)}m\n' 
@@ -321,12 +323,12 @@ class Environment:
                         # reward_np[i] = 0
                         
                         # vel_vector diff acceleration model
-                        vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
-                                                vel_vect_replay_buffer[i,:,each_step[i]])
-                        vel_diff_past = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]-1] - 
-                                                vel_vect_replay_buffer[i,:,each_step[i]-1])
-                        vel_diff_dot = (vel_diff_current - vel_diff_past) / DELTA_T
-                        reward_np[i] = -vel_diff_dot
+                        # vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
+                        #                         vel_vect_replay_buffer[i,:,each_step[i]])
+                        # vel_diff_past = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]-1] - 
+                        #                         vel_vect_replay_buffer[i,:,each_step[i]-1])
+                        # vel_diff_dot = (vel_diff_current - vel_diff_past) / DELTA_T
+                        # reward_np[i] = -vel_diff_dot
 
                         # vel_diff minimize model
                         # reward_np[i] = 10 - np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])
@@ -337,8 +339,15 @@ class Environment:
                         # distance_hat = distance_vect_np[i] / distance_step[i]
                         # reward_np[i] = np.dot(distance_hat, vel_n_hat) *\
                         #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
-                        each_step[i] += 1           # 그대로 진행
+
+                        # distance model
+                        # reward_np[i] = -distance_step[i]
+                        reward_np[i] = np.clip(1/distance_step[i],0,10000)
+
                         reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                        reward_np[i] = 0
+                        each_step[i] += 1           # 그대로 진행
+
                     masks = torch.cat((masks, mask_step), dim=0)   
                     masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
 

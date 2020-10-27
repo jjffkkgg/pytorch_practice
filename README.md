@@ -1,4 +1,4 @@
-## ROS-pytorch control repository [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jjffkkgg/pytorch_practice/master) [<img src="https://jupyter.org/assets/main-logo.svg" height="20" title="JupyterLab">](https://mybinder.org/v2/gh/jjffkkgg/pytorch_practice/master?urlpath=lab) [![nbviewer](https://img.shields.io/badge/view%20on-nbviewer-brightgreen.svg)](http://nbviewer.jupyter.org/github/jjffkkgg/pytorch_practice/tree/master)
+## ROS-pytorch control repository [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jjffkkgg/ros-torch-control/master) [<img src="https://jupyter.org/assets/main-logo.svg" height="20" title="JupyterLab">](https://mybinder.org/v2/gh/jjffkkgg/ros-torch-control/master?urlpath=lab) [![nbviewer](https://img.shields.io/badge/view%20on-nbviewer-brightgreen.svg)](http://nbviewer.jupyter.org/github/jjffkkgg/ros-torch-control/tree/master)
 
 This repository is available for use of pytorch with following libraries.
 
@@ -23,4 +23,5 @@ $ pip3 install --user git+https://github.com/catkin/catkin_tools.git
 $ catkin init
 $ catkin build
 $ . ./devel/setup.bash
+$ roslaunch quadrotor_a2c quadrotor.launch
 ```
