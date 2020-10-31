@@ -289,11 +289,11 @@ class Environment:
                             reward_np[i] = 5000.0
                         elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
                             reward_np[i] = -100000
-                        elif np.linalg.norm(obs_np[i,9:12] - par.startpoint) <= 0.5:
+                        elif np.linalg.norm(obs_np[i,9:12] - par.startpoint) <= 0.1:
                             reward_np[i] = -10000000
                         else:
                             reward_replay_buffer[i, each_step[i]] = -10
-                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean() + each_step[i] * DELTA_T
+                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean() * each_step[i] * DELTA_T
                             masks_arrive_step = torch.FloatTensor([[0.0]])
 
                         # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
@@ -341,8 +341,8 @@ class Environment:
                         #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
 
                         # distance model
-                        reward_np[i] = -distance_step[i]
-                        # reward_np[i] = np.clip(1/distance_step[i],0,10000)
+                        # reward_np[i] = -distance_step[i]
+                        reward_np[i] = np.clip(1/distance_step[i],0,10000)
 
                         reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                         reward_np[i] = 0
