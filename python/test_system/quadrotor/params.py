@@ -22,7 +22,7 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 45000         # 최대 에피소드 수
+NUM_EPISODES = 90000         # 최대 에피소드 수
 is_resume = True
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
@@ -37,7 +37,7 @@ learning_rate = 0.001
 ''' Trajectory '''
 startpoint = np.array([0,0,5])
 endpoint = np.array([5,5,30])
-arrive_time = 3
+arrive_time = 30
 hover_time = 2
 time = np.arange(0, arrive_time + hover_time, DELTA_T)
 ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
