@@ -33,9 +33,9 @@ class Computation:
     def euler_kinematics(e, w):
         '''Derivative of Euler angles'''
         v = ca.SX.sym('v',3)
-        v[0] = w[0] + (w[1]*ca.sin(e[2]+w[2]*ca.cos(e[2])))*ca.tan(e[1])
-        v[1] = w[1]*ca.cos(e[2]) - w[2]*ca.sin(e[2])
-        v[2] = (w[1]*ca.sin(e[2])+w[2]*ca.cos(e[2]))/ca.cos(e[1])
+        v[0] = w[0] - w[2]*ca.sin(e[1])
+        v[1] = w[1]*ca.cos(e[0]) + w[2]*ca.cos(e[1])*ca.sin(e[0])
+        v[2] = w[2]*ca.cos(e[1])*ca.cos(e[0]) - w[1]*ca.sin(e[0])
         return v
 
     @staticmethod
@@ -60,7 +60,7 @@ class Computation:
             [0, ca.sin(phi), ca.cos(phi)]
         ])
 
-        R = np.dot(np.dot(R_z, R_y), R_x)
+        R = np.dot(R_x,np.dot(R_y, R_z))
     
         return R
 

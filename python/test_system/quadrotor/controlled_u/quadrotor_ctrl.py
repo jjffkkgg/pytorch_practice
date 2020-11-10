@@ -75,6 +75,9 @@ class QuadRotorEnv:
         
         self.observation_space_size = 12                      # size of state space
         self.action_space_size = len(self.action_dic)         # size of action space
+        
+        # reference position
+        pos_n_ref = ca.SX.sym('pos_n_ref',3)
 
         # defining test space
         # self.test_space = Obstacle(lim)
@@ -112,8 +115,9 @@ class QuadRotorEnv:
 
         # forces and moments
         C_bn = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
-        F_b = ca.vertcat(0, 0, 0)
-        F_b = ca.mtimes(C_bn, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+        F_b = ca.vertcat(0, 0, 0)                                     # Body Force Initialize 
+        g_b = ca.mtimes(C_bn, ca.vertcat(0, 0, -m*g))                
+        F_b += g_b   
         M_b = ca.SX.zeros(3)                                          # Body moment(torque) Initialize
         u_motor = comp.saturate(
             comp.mix2motor(u_mix), len(motor_dirs)
@@ -142,6 +146,29 @@ class QuadRotorEnv:
             comp.euler_kinematics(euler,omega_b),                                       # omega (angular velocity) (inertial)
             ca.mtimes(C_bn.T, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
+
+        vel_ref = pos_n_ref - pos_n
+        vel_ref_b = ca.mtimes(C_bn, vel_ref)
+        acc_ref_b = vel_ref_b - x[3:6]
+        # vel_err_b_z = acc_ref_b[2]
+        F_ref_b = acc_ref_b * par.m
+        F_err_b = F_ref_b - F_b
+        F_ref_T = F_ref_b - g_b
+        vel_err_b_z = F_ref_T[2] * par.m
+
+
+        F_err_b[2] = 0
+        F_Tf_b = F_err_b - g_b
+        F_b_xy = F_b
+        F_b_xy[2] = 0
+        F_Ti_b = F_b_xy - g_b
+        theta_err_b_mag = ca.acos(ca.dot(F_Tf_b, F_Ti_b) / (ca.norm_1(F_Tf_b)*ca.norm_1(F_Ti_b)))
+        theta_err_b_hat = ca.cross(F_Ti_b, F_Tf_b) / ca.norm_1(ca.cross(F_Ti_b, F_Tf_b))
+        omega_b_ref = theta_err_b_hat * theta_err_b_mag
+        omega_b_err = omega_b_ref - omega_b
+        
+        self.f_control = ca.Function('f_control', [x,u_mix,p,pos_n_ref], [vel_err_b_z, omega_b_err, vel_ref_b, omega_b_ref],
+        ['x','u_mix','p','pos_n_ref'],['vel_err_b_z','omega_b_err','vel_ref_b','omega_b_ref'])    
 
     def step(self, action: int, step, dt=DELTA_T):
         '''calculate state after step input'''

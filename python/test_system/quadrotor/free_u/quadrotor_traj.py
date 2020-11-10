@@ -111,9 +111,9 @@ class QuadRotorEnv:
         J_b = ca.diag(ca.vertcat(Jx, Jy, Jz))                         # Moment of inertia of quadrotor
 
         # forces and moments
-        C_bn = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
+        C_nb = comp.euler_to_dcm(euler)                               # from euler to direction cosine matrix
         F_b = ca.vertcat(0, 0, 0)
-        F_b = ca.mtimes(C_bn, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
+        F_b = ca.mtimes(C_nb.T, ca.vertcat(0, 0, -m*g))               # Body Force Initialize  
         M_b = ca.SX.zeros(3)                                          # Body moment(torque) Initialize
         u_motor = comp.saturate(
             comp.mix2motor(u_mix), len(motor_dirs)
@@ -130,7 +130,7 @@ class QuadRotorEnv:
                 V = V, kV = kV, CT = CT, Cm = Cm                                        # get scalar F and M of each rotor
             )                                     
             Fi_b_vec = ca.vertcat(0, 0, Fi_b)
-            Mi_b_vec = ca.vertcat(0, 0, motor_dirs[i] * Mi_b)                           # get each rotor's F and M vector
+            Mi_b_vec = ca.vertcat(0, 0, -motor_dirs[i] * Mi_b)                           # get each rotor's F and M vector
             F_b += Fi_b_vec                                                             # sum up all rotor F vector
             M_b += Mi_b_vec + ca.cross(ri_b, Fi_b_vec)                                  # sum up all rotor M vector & M from each leg
 
@@ -140,7 +140,7 @@ class QuadRotorEnv:
                       M_b - ca.cross(omega_b, ca.mtimes(J_b, omega_b))),                # omega dot (body angular acceleration)
             F_b/m - ca.cross(omega_b,vel_b),                                            # v dot (body acceleration)
             comp.euler_kinematics(euler,omega_b),                                       # omega (angular velocity) (inertial)
-            ca.mtimes(C_bn.T, vel_b),                                                     # v (velocity) (inertial)
+            ca.mtimes(C_nb, vel_b),                                                     # v (velocity) (inertial)
             )], ['x','u_mix','p'],['x_dot'])
 
     def step(self, action: int, step, dt=DELTA_T):
@@ -176,8 +176,8 @@ class QuadRotorEnv:
         distance_vect = self.trajectory[step + 1] - self.xi[9:12]
         distance = np.linalg.norm(distance_vect)
         euler = self.xi[6:9]
-        C_bn = comp.euler_to_dcm(euler)
-        vel_n = ca.mtimes(C_bn.T, self.xi[3:6])
+        C_nb = comp.euler_to_dcm(euler)
+        vel_n = ca.mtimes(C_nb, self.xi[3:6])
         # vel_n_size = np.linalg.norm(vel_n)
         # vel_dot = np.dot(distance_vect/distance, vel_n/vel_n_size)           # minimum = -1, maximum = +1
         # vel_diff_vect = distance_vect - vel_n

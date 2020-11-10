@@ -36,8 +36,8 @@ learning_rate = 0.001
 
 ''' Trajectory '''
 startpoint = np.array([0,0,2])
-endpoint = np.array([-7,11,15])
-arrive_time = 10
+endpoint = np.array([5,5,10])
+arrive_time = 15
 hover_time = 5
 time = np.arange(0, arrive_time + hover_time, DELTA_T)
 ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
