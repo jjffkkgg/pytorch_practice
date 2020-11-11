@@ -93,3 +93,18 @@ class Computation:
                               ca.if_else(temp < 0, 0, temp))
             motor[i] = temp
         return motor
+
+    @staticmethod
+    def linearize(eqs):
+        x = eqs['x']
+        u = eqs['u_mix']
+        p = eqs['p']
+        y = x  # state feedback
+        rhs = eqs['rhs']
+        xdot = rhs(x, u, p)
+        A = ca.jacobian(xdot, x)
+        B = ca.jacobian(xdot, u)
+        C = ca.jacobian(y, x)
+        D = ca.jacobian(y, u)
+        return ca.Function('ss', [x, u, p], [A, B, C, D],
+                ['x', 'u', 'p'], ['A', 'B', 'C', 'D'])
