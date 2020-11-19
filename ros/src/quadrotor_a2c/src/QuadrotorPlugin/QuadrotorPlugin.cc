@@ -161,7 +161,7 @@ void QuadrotorPlugin::Update(const common::UpdateInfo &/*_info*/)
     // auto inertial = this->body->GetInertial();
     // double m = inertial->Mass();
     auto vel_INE = this->body->WorldLinearVel();       // inertial frame
-    auto omega_INE = this->body->WorldAngularAccel();    // inertial frame
+    auto omega_INE = this->body->AngularAccel();    // Body frame
     auto pose = this->body->WorldPose();
     auto euler_INE = pose.Rot().Euler();                // return as quternion -> Euler
     auto pos_INE = pose.Pos();

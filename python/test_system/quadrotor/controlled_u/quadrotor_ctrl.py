@@ -65,10 +65,10 @@ class QuadRotorEnv:
         self.x = ca.SX.sym(
             'x',self.observation_space_size
             )
-        omega_b = x[0:3]                      # Angular velocity (body)
-        vel_b = x[3:6]                        # Velocity (body)
-        euler = x[6:9]                        # Orientation (inertial) = r_nb
-        pos_n = x[9:12]                       # Position (inertial)
+        omega_b = self.x[0:3]                      # Angular velocity (body)
+        vel_b = self.x[3:6]                        # Velocity (body)
+        euler = self.x[6:9]                        # Orientation (inertial) = r_nb
+        pos_n = self.x[9:12]                       # Position (inertial)
 
         # input
         n_motors = len(arm_angles_deg)
@@ -76,18 +76,18 @@ class QuadRotorEnv:
 
         # parameters
         self.p = ca.SX.sym('p', 12)
-        m = p[0]                # mass of the body [kg]
-        l_arm = p[1]            # length or the rotor arm [m]
-        r = p[2]                # radius of propeller [m]
-        rho = p[3]              # density of air [kg/m^3]
-        V = p[4]                # voltage of battery [V]
-        kV = p[5]               # motor kV constant, [rpm/V]
-        CT = p[6]               # Thrust coeff
-        Cm = p[7]               # moment coeff
-        g = p[8]                # gravitational constant [m/s^2]
-        Jx = p[9]
-        Jy = p[10]
-        Jz = p[11]
+        m = self.p[0]                # mass of the body [kg]
+        l_arm = self.p[1]            # length or the rotor arm [m]
+        r = self.p[2]                # radius of propeller [m]
+        rho = self.p[3]              # density of air [kg/m^3]
+        V = self.p[4]                # voltage of battery [V]
+        kV = self.p[5]               # motor kV constant, [rpm/V]
+        CT = self.p[6]               # Thrust coeff
+        Cm = self.p[7]               # moment coeff
+        g = self.p[8]                # gravitational constant [m/s^2]
+        Jx = self.p[9]
+        Jy = self.p[10]
+        Jz = self.p[11]
 
         J_b = ca.diag(ca.vertcat(Jx, Jy, Jz))                         # Moment of inertia of quadrotor
 
@@ -156,11 +156,12 @@ class QuadRotorEnv:
         done = False
         arrive = False
         arrive_turn = False
-        self.u += self.action_dic[action]
 
         [err_vbz, err_wb, ref_vbz, ref_wb] = self.f_control(self.xi, self.u, self.p_in, self.trajectory[step]+1e-6)
-        err_wb *= 1
-        err_vbz *= self.action_dic[action]
+        self.k += self.action_dic[action]
+        err_vbz *= self.k[3]
+        err_wb *= self.k[0:3]
+
 
         # Input calc
         rx = np.dot(self.rollr_sys.A, self.rx_0) + np.dot(self.rollr_sys.B, err_wb[0])
@@ -266,20 +267,21 @@ class QuadRotorEnv:
         self.p_in = p
         self.hover_thrust = comp.throttle(p[0]*p[8],p[3],p[2],p[4],p[5],p[6],p[7])
         self.u = np.array([0.0,0.0,0.0,self.hover_thrust * 4])
+        self.k = np.array([1.0,1.0,1.0,1.0])
         self.t = 0
         # self.radius = 2 * self.p[1]
         self.time = arrive_time
         self.arr_hover_t = hover_time
         self.trajectory = par.ref_trajectory
 
-        eqs = {
+        self.eqs = {
             'rhs': self.rhs,
             'x': self.x,
             'u_mix': self.u_mix,
             'p': self.p
         }
 
-        lin_state_func = comp.linearize(eqs)
+        lin_state_func = comp.linearize(self.eqs)
         [A,B,C,D] = lin_state_func(self.xi,self.u,self.p_in)
         sys = control.ss(A,B,C,D)
         tf_sys = control.ss2tf(sys).minreal(tol=1e-6)
@@ -294,8 +296,8 @@ class QuadRotorEnv:
 
         H_rollr = 1
         H_pitchr = 1
-        H_yawr = 5
-        H_thrustr = 3 + (s+10)/(s+8)
+        H_yawr = 1
+        H_thrustr = 1
 
         H = [H_rollr, H_pitchr, H_yawr, H_thrustr]
 

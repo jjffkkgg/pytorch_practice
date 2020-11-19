@@ -22,8 +22,8 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 110000         # 최대 에피소드 수
-is_resume = True
+NUM_EPISODES = 1000         # 최대 에피소드 수
+is_resume = False
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -35,18 +35,18 @@ DELTA_T = 0.01
 learning_rate = 0.001
 
 ''' Trajectory '''
-startpoint = np.array([0,0,2])
-endpoint = np.array([-100,300,500])
-arrive_time = 20
-hover_time = 30
+startpoint = np.array([0,0,5])
+endpoint = np.array([-10,30,25])
+arrive_time = 15
+hover_time = 10
 time = np.arange(0, arrive_time + hover_time, DELTA_T)
 ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
 for _ in range(int(hover_time * (1/DELTA_T))):
     ref_trajectory = np.vstack((ref_trajectory, endpoint))
 
 '''Action control'''
-off_dist = 1    # [m]
-action_roll = 0.001               # [V]
-action_pitch = 0.001
-action_yaw = 0.001
+off_dist = 5    # [m]
+action_roll = 0.01
+action_pitch = 0.01
+action_yaw = 0.01
 action_thrust = 0.1

@@ -125,10 +125,10 @@ include_directories(
 )
 
 ## Declare a C++ library
-# add_library(QuadrotorPlugin
-#   src/QuadrotorPlugin/QuadrotorPlugin.cc
-#   src/QuadrotorPlugin/casadi_gen.c
-# )
+add_library(QuadrotorPlugin
+  src/QuadrotorPlugin/QuadrotorPlugin.cc
+  src/QuadrotorPlugin/casadi_gen.c
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
