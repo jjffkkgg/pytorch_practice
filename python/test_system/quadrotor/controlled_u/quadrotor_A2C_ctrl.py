@@ -234,6 +234,7 @@ class Environment:
         obs_step = np.zeros([NUM_PROCESSES, 12])
         distance_step = np.zeros([NUM_PROCESSES])
         vel_n_step = np.zeros([NUM_PROCESSES])
+        rec_stop = np.zeros(NUM_PROCESSES)
 
         # 초기 state...
         obs = [envs[i].reset(p, arrive_time, hover_time) for i in range(NUM_PROCESSES)]
@@ -263,93 +264,72 @@ class Environment:
                 
                 # process 반복
                 for i in range(NUM_PROCESSES):
-                    obs_np[i], input_np[i], reward_np[i], done_np[i],\
-                    done_info_np[i], distance_vect_np[i], vel_vect_np[i]\
-                       = envs[i].step(actions[i], each_step[i])
+                    if not rec_stop[i]:
+
+                        obs_np[i], input_np[i], reward_np[i], done_np[i],\
+                        done_info_np[i], distance_vect_np[i], vel_vect_np[i]\
+                        = envs[i].step(actions[i], each_step[i])
 
                     # train data 의 저장 -> reward & replay 위함
-                    obs_step[i] = obs_np[i]
-                    distance_step[i] = np.linalg.norm(distance_vect_np[i])
-                    vel_n_step[i] = np.linalg.norm(vel_vect_np[i])
-                    input_replay_buffer[i, int(each_step[i])] = input_np[i]
-                    obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
-                    distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
-                    distance_vect_replay_buffer[i, :, int(each_step[i])] = distance_vect_np[i]
-                    vel_vect_replay_buffer[i,:,int(each_step[i])] = vel_vect_np[i]
-                    step_replay_buffer[i] = each_step[i]
+                        obs_step[i] = obs_np[i]
+                        distance_step[i] = np.linalg.norm(distance_vect_np[i])
+                        vel_n_step[i] = np.linalg.norm(vel_vect_np[i])
+                        input_replay_buffer[i, int(each_step[i])] = input_np[i]
+                        obs_replay_buffer[i,int(each_step[i])] = obs_np[i]
+                        distance_replay_buffer[i,int(each_step[i])] = distance_step[i]
+                        distance_vect_replay_buffer[i, :, int(each_step[i])] = distance_vect_np[i]
+                        vel_vect_replay_buffer[i,:,int(each_step[i])] = vel_vect_np[i]
+                        step_replay_buffer[i] = each_step[i]
 
-                    # episode의 종료가치, state_next를 설정
-                    if done_np[i]:          # success or fail
-                        mask_step = torch.FloatTensor([[1.0]])
-                        print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
-                        if done_info_np[i,0]:                               # done with arrival
-                            masks_arrive_step= torch.FloatTensor([[1.0]])
-                            reward_np[i] = 10000.0
-                        elif done_info_np[i,1]:                             # done with turn
-                            reward_np[i] = 5000.0
-                        elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
-                            reward_np[i] = -100000
-                        elif np.linalg.norm(obs_np[i,9:12] - par.startpoint) <= 0.1:
-                            reward_np[i] = -10000000
-                        else:
-                            reward_replay_buffer[i, each_step[i]] = -10
-                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean() * each_step[i] * DELTA_T
+                        # episode의 종료가치, state_next를 설정
+                        if done_np[i]:          # success or fail
+                            mask_step = torch.FloatTensor([[1.0]])
+                            print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
+                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean()
                             masks_arrive_step = torch.FloatTensor([[0.0]])
 
-                        # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
-                        reward_past_32 = np.hstack((reward_past_32[1:],
-                                                    reward_replay_buffer[i,:each_step[i]+1].mean()))
-                        print(f'slot_reward:    {round(reward_np[i,0],4)}\n'
-                              # f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
-                              f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
-                              f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
-                              f'distance:       {round(distance_step[i],4)}m\n' 
-                              f'reward_mean:    {round(reward_past_32.mean(),2)}\n'
-                              f'reward_max:     {round(reward_past_32.max(),2)}'
-                            #   f'reward_min: {round(reward_past_32.min(),2)}'
-                              ) 
-                        each_step[i] = 0                                        # step 초기화
-                        obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
-                        reward_replay_buffer[i] = 0
-                        obs_replay_buffer[i] = 0
-                        distance_replay_buffer[i] = 0
-                        distance_vect_replay_buffer[i] = 0
-                        vel_vect_replay_buffer[i] = 0
-                    else:                           # 비행중
-                        mask_step = torch.FloatTensor([[0.0]])
-                        masks_arrive_step = torch.FloatTensor([[0.0]])
+                            # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                            reward_past_32 = np.hstack((reward_past_32[1:],
+                                                        reward_replay_buffer[i,:each_step[i]+1].mean()))
+                            print(f'slot_reward:    {round(reward_np[i,0],4)}\n'
+                                # f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
+                                f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
+                                f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
+                                #   f'distance:       {round(distance_step[i],4)}m\n' 
+                                f'reward_mean:    {round(reward_past_32.mean(),2)}\n'
+                                f'reward_max:     {round(reward_past_32.max(),2)}'
+                                #   f'reward_min: {round(reward_past_32.min(),2)}'
+                                ) 
 
-                        # original
-                        # reward_np[i] = 0
-                        
-                        # vel_vector diff acceleration model
-                        # vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
-                        #                         vel_vect_replay_buffer[i,:,each_step[i]])
-                        # vel_diff_past = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]-1] - 
-                        #                         vel_vect_replay_buffer[i,:,each_step[i]-1])
-                        # vel_diff_dot = (vel_diff_current - vel_diff_past) / DELTA_T
-                        # reward_np[i] = -vel_diff_dot
+                            if (not rec_stop[i]) and (NUM_EPISODES-episode < par.time.size):
+                                rec_stop[i] = True
+                            else:
+                                each_step[i] = 0                                        # step 초기화
+                                obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
+                                reward_replay_buffer[i] = 0
+                                obs_replay_buffer[i] = 0
+                                distance_replay_buffer[i] = 0
+                                distance_vect_replay_buffer[i] = 0
+                                vel_vect_replay_buffer[i] = 0
 
-                        # vel_diff minimize model
-                        # reward_np[i] = 10 - np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])
-                        # reward_np[i] = np.clip(1/(np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])),0,1000)
+                        else:                           # 비행중
+                            mask_step = torch.FloatTensor([[0.0]])
+                            masks_arrive_step = torch.FloatTensor([[0.0]])
 
-                        # vel_diff dot product model
-                        # vel_n_hat = vel_vect_np[i] / vel_n_step[i]
-                        # distance_hat = distance_vect_np[i] / distance_step[i]
-                        # reward_np[i] = np.dot(distance_hat, vel_n_hat) *\
-                        #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
+                            # original
+                            # reward_np[i] = 0
 
-                        # distance model
-                        # reward_np[i] = -distance_step[i]
-                        reward_np[i] = np.clip(1/distance_step[i],0,10000)
+                            # distance model
+                            # reward_np[i] = -distance_step[i]
+                            reward_np[i] = np.clip(1/distance_step[i],0,50)
 
-                        reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
-                        reward_np[i] = 0
-                        each_step[i] += 1           # 그대로 진행
+                            reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                            reward_np[i] = 0
+                            
+                            each_step[i] += 1           # 그대로 진행
 
-                    masks = torch.cat((masks, mask_step), dim=0)   
-                    masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
+                        masks = torch.cat((masks, mask_step), dim=0)   
+                        masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
 
                 # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
                 reward = torch.from_numpy(reward_np).float()

@@ -22,7 +22,7 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 1000         # 최대 에피소드 수
+NUM_EPISODES = 300         # 최대 에피소드 수
 is_resume = False
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
@@ -38,15 +38,15 @@ learning_rate = 0.001
 startpoint = np.array([0,0,5])
 endpoint = np.array([-10,30,25])
 arrive_time = 15
-hover_time = 10
+hover_time = 5
 time = np.arange(0, arrive_time + hover_time, DELTA_T)
 ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
 for _ in range(int(hover_time * (1/DELTA_T))):
     ref_trajectory = np.vstack((ref_trajectory, endpoint))
 
 '''Action control'''
-off_dist = 5    # [m]
+off_dist = 10    # [m]
 action_roll = 0.01
 action_pitch = 0.01
 action_yaw = 0.01
-action_thrust = 0.1
+action_thrust = 0.01

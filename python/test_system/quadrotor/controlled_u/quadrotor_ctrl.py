@@ -191,7 +191,7 @@ class QuadRotorEnv:
         self.t += dt
 
         # calculate distance to endpoint
-        distance_vect = self.trajectory[step + 1] - self.xi[9:12]
+        distance_vect = self.trajectory[step] - self.xi[9:12] + 1e-10
         distance = np.linalg.norm(distance_vect)
         euler = self.xi[6:9]
         C_nb = comp.euler_to_dcm(euler)
@@ -225,7 +225,7 @@ class QuadRotorEnv:
                 print('------over the limit------')
         
         # arrival cases
-        if step >= (self.time + self.arr_hover_t)*(1/dt) - 5:
+        if step >= (self.time + self.arr_hover_t)*(1/dt) - 1:
             if distance <= 0.1:
                 if np.linalg.norm(vel_n) <= 0.05:
                     if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
@@ -238,6 +238,7 @@ class QuadRotorEnv:
                         done = True
                 else:
                     print('------arrive but not hover------')
+                    done = True
             else:
                 print('------Overtime!------')
                 done = True
@@ -294,10 +295,10 @@ class QuadRotorEnv:
     
         s = control.tf([1,0],[0,1])
 
-        H_rollr = 1
-        H_pitchr = 1
-        H_yawr = 1
-        H_thrustr = 1
+        H_rollr = 2
+        H_pitchr = 2
+        H_yawr = 5
+        H_thrustr = 4
 
         H = [H_rollr, H_pitchr, H_yawr, H_thrustr]
 
