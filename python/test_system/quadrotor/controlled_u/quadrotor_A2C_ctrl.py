@@ -175,11 +175,12 @@ class Brain(object):
 
 class Environment:
     def load_ckp(self, checkpoint_fpath, model, optimizer):
+        '''load past model'''
         checkpoint = torch.load(checkpoint_fpath)
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-        return model, optimizer, checkpoint['episode']
+        return model, optimizer, checkpoint['episode'], checkpoint['reward_history']
 
     def run(self, arrive_time: int, hover_time: int) -> None:
         '''running entry point'''
@@ -195,13 +196,14 @@ class Environment:
         n_out = envs[0].action_space_size               # action outpus
         n_mid = n_in * n_out                            # 972(12*81) mid junction
         episode = 0
+        reward_history = []
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                           # Brain init
 
         # Load saved model to resume learning (comment out to start new training)
         if par.is_resume:
             ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
-            actor_critic, glob_brain.optimizer, episode = self.load_ckp(
+            actor_critic, glob_brain.optimizer, episode, reward_history = self.load_ckp(
                 ckp_path, actor_critic, glob_brain.optimizer)
 
         msg = 'Please change NUM_EPISODES to bigger than previous: %i' % episode
@@ -270,7 +272,7 @@ class Environment:
                         done_info_np[i], distance_vect_np[i], vel_vect_np[i]\
                         = envs[i].step(actions[i], each_step[i])
 
-                    # train data 의 저장 -> reward & replay 위함
+                        # train data 의 저장 -> reward & replay 위함
                         obs_step[i] = obs_np[i]
                         distance_step[i] = np.linalg.norm(distance_vect_np[i])
                         vel_n_step[i] = np.linalg.norm(vel_vect_np[i])
@@ -285,12 +287,21 @@ class Environment:
                         if done_np[i]:          # success or fail
                             mask_step = torch.FloatTensor([[1.0]])
                             print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
-                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean()
-                            masks_arrive_step = torch.FloatTensor([[0.0]])
+                            if done_info_np[i,0]:                               # done with arrival
+                                masks_arrive_step= torch.FloatTensor([[1.0]])
+                                reward_np[i] = 10000.0
+                            elif done_info_np[i,1]:                             # done with turn
+                                reward_np[i] = 5000.0
+                            elif each_step[i] <= par.time.size - 10:              # abnormal trial
+                                reward_np[i] = -10
+                            else:
+                                reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean()
+                                masks_arrive_step = torch.FloatTensor([[0.0]])
 
                             # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                             reward_past_32 = np.hstack((reward_past_32[1:],
                                                         reward_replay_buffer[i,:each_step[i]+1].mean()))
+                            reward_history.append(reward_replay_buffer[i,:each_step[i]+1].mean())
                             print(f'slot_reward:    {round(reward_np[i,0],4)}\n'
                                 # f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
                                 f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
@@ -301,7 +312,7 @@ class Environment:
                                 #   f'reward_min: {round(reward_past_32.min(),2)}'
                                 ) 
 
-                            if (not rec_stop[i]) and (NUM_EPISODES-episode < par.time.size):
+                            if (not rec_stop[i]) and (NUM_EPISODES-episode < (par.time.size/NUM_ADVANCED_STEP)):
                                 rec_stop[i] = True
                             else:
                                 each_step[i] = 0                                        # step 초기화
@@ -320,16 +331,18 @@ class Environment:
                             # reward_np[i] = 0
 
                             # distance model
-                            # reward_np[i] = -distance_step[i]
-                            reward_np[i] = np.clip(1/distance_step[i],0,50)
+                            reward_np[i] = 10-distance_step[i]
+                            # reward_np[i] = np.clip(1/distance_step[i],0,50)
 
                             reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                             reward_np[i] = 0
                             
                             each_step[i] += 1           # 그대로 진행
+                    else:
+                        mask_step = torch.FloatTensor([[1.0]])
 
-                        masks = torch.cat((masks, mask_step), dim=0)   
-                        masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
+                    masks = torch.cat((masks, mask_step), dim=0)   
+                    masks_arrive = torch.cat((masks_arrive, masks_arrive_step), dim=0)
 
                 # 보상을 tensor로 변환하고, 에피소드의 총보상에 더해줌
                 reward = torch.from_numpy(reward_np).float()
@@ -376,7 +389,8 @@ class Environment:
                 checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
-                    'optimizer': glob_brain.optimizer.state_dict()
+                    'optimizer': glob_brain.optimizer.state_dict(),
+                    'reward_history': reward_history
                 }
                 torch.save(checkpoint, savepath)
 
@@ -385,7 +399,8 @@ class Environment:
                     'dist': distance_replay_buffer,
                     'input': input_replay_buffer,
                     'step': each_step,
-                    'reward': reward_replay_buffer
+                    'reward': reward_replay_buffer,
+                    'reward_history': reward_history
                 }
             
             episode += 1
@@ -395,7 +410,8 @@ class Environment:
         checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
-                    'optimizer': glob_brain.optimizer.state_dict()
+                    'optimizer': glob_brain.optimizer.state_dict(),
+                    'reward_history': reward_history
                 }
         torch.save(checkpoint, savepath)
 
@@ -404,5 +420,6 @@ class Environment:
                 'dist': distance_replay_buffer,
                 'input': input_replay_buffer,
                 'step': each_step,
-                'reward': reward_replay_buffer
+                'reward': reward_replay_buffer,
+                'reward_history': reward_history
             }

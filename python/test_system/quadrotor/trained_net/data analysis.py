@@ -14,12 +14,13 @@ sys.path.insert(0,'./python/test_system/quadrotor')
 import params as par
 import json
 
-flight_data = np.load('./python/test_system/quadrotor/trained_net/flight_data.npy', allow_pickle=True).item()
+flight_data = np.load('flight_data.npy', allow_pickle=True).item()
 data = flight_data['obs']
 distance = flight_data['dist']
 u_in = flight_data['input']
 step = flight_data['step']
 reward = flight_data['reward']
+reward_history = flight_data['reward_history']
 
 
 # In[2]:
@@ -36,9 +37,10 @@ def update_lines(num, data, line):
 
 
 ref_trajectory = par.ref_trajectory
-index = np.argmax(step)
+index = np.argmax(reward[:,:].mean(axis=1))
 index_step = step[index]
 t = par.time[:index_step]
+step
 
 
 # In[4]:
@@ -131,6 +133,15 @@ plt.title('Reward')
 plt.grid()
 
 fig2.savefig('./python/test_system/quadrotor/trained_net/flight_data.png')
+
+fig3 = plt.figure(3)
+plt.plot(reward_history)
+plt.xlabel('iteration')
+plt.ylabel('reward')
+plt.grid()
+plt.title('Reward history')
+
+fig2.savefig('/python/test_system/quadrotor/trained_net/reward_history.png')
 
 
 # In[22]:
