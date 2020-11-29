@@ -220,6 +220,7 @@ class QuadRotorEnv:
                         done = True
                 else:
                     print('------arrive but not hover------')
+                    done = True
             else:
                 print('------Overtime!------')
                 done = True

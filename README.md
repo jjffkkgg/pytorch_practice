@@ -12,8 +12,22 @@ $ conda env create -f environment.yml
 $ conda activate pyt
 $ jupyter lab
 ```
+## Python simulation
 
-## ROS setup (noetic, Ubuntu 20.04 LTS)
+In test_system/quadrotor
+* controlled_u
+- Training the quadcopter w/ transfer function controller
+
+![reward_history](https://user-images.githubusercontent.com/49571274/100534754-b24e0a80-3255-11eb-9ad5-b1b1b3ba91fe.png)
+![flight_data](https://user-images.githubusercontent.com/49571274/100534893-52f0fa00-3257-11eb-8539-7851c514a082.png)
+![flight](https://user-images.githubusercontent.com/49571274/100534943-c6930700-3257-11eb-80b6-4a795c60a935.gif)
+
+* free_u
+- Training without controller, free input
+
+
+
+## ROS setup (noetic, Ubuntu 20.04 LTS) [Not Running]
 
 Follow installation guide in ROS neotic.
 

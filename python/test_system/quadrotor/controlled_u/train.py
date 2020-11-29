@@ -12,5 +12,5 @@ if __name__ == '__main__':
     hover_time = par.hover_time
     quadrotor_env = train_model.Environment()
     data = quadrotor_env.run(arrive_time, hover_time)
-    np.save('./python/test_system/quadrotor/trained_net/flight_data.npy', data)
+    np.save(par.datapath, data)
 # %%

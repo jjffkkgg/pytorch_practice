@@ -200,7 +200,7 @@ class Environment:
 
         # Load saved model to resume learning (comment out to start new training)
         if par.is_resume:
-            ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+            ckp_path = par.netpath
             actor_critic, glob_brain.optimizer, episode = self.load_ckp(
                 ckp_path, actor_critic, glob_brain.optimizer)
 
@@ -392,7 +392,7 @@ class Environment:
             # 모든 환경이 성공(도착)
             if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
-                savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+                savepath = par.netpath
                 checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
@@ -411,7 +411,7 @@ class Environment:
             episode += 1
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
-        savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
+        savepath = par.netpath
         checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),

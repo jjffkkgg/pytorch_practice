@@ -1,6 +1,10 @@
 import numpy as np
 # import json
 
+'''savepath'''
+netpath = "./python/test_system/quadrotor/free_u/trained_net/A2C_quadrotor.pth"
+datapath = "./python/test_system/quadrotor/free_u/trained_net/flight_data.npy"
+
 ''' system parameters '''
 l_arm = 0.4                             # length or the rotor arm [m]
 m = 1                                # mass of vehicle [kg]

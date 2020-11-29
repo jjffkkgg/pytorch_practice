@@ -1,6 +1,10 @@
 import numpy as np
 # import json
 
+'''savepath'''
+netpath = "./python/test_system/quadrotor/controlled_u/trained_net/A2C_quadrotor.pth"
+datapath = "./python/test_system/quadrotor/controlled_u/trained_net/flight_data.npy"
+
 ''' system parameters '''
 l_arm = 0.4                             # length or the rotor arm [m]
 m = 1                                # mass of vehicle [kg]
@@ -22,7 +26,7 @@ motor_dirs = [1, 1, -1, -1]
 
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 3000         # 최대 에피소드 수
+NUM_EPISODES = 21200         # 최대 에피소드 수
 is_resume = True
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수

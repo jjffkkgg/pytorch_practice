@@ -201,8 +201,8 @@ class Environment:
         glob_brain = Brain(actor_critic)                           # Brain init
 
         # Load saved model to resume learning (comment out to start new training)
+        ckp_path = par.netpath
         if par.is_resume:
-            ckp_path = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
             actor_critic, glob_brain.optimizer, episode, reward_history = self.load_ckp(
                 ckp_path, actor_critic, glob_brain.optimizer)
 
@@ -331,8 +331,8 @@ class Environment:
                             # reward_np[i] = 0
 
                             # distance model
-                            reward_np[i] = 10-distance_step[i]
-                            # reward_np[i] = np.clip(1/distance_step[i],0,50)
+                            # reward_np[i] = 100-distance_step[i]**2
+                            reward_np[i] = np.clip(1/distance_step[i],0,10)*10
 
                             reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
                             reward_np[i] = 0
@@ -385,14 +385,13 @@ class Environment:
             # 모든 환경이 성공(도착)
             if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
-                savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
                 checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
                     'optimizer': glob_brain.optimizer.state_dict(),
                     'reward_history': reward_history
                 }
-                torch.save(checkpoint, savepath)
+                torch.save(checkpoint, ckp_path)
 
                 return {
                     'obs': obs_replay_buffer,
@@ -406,14 +405,13 @@ class Environment:
             episode += 1
             
         print('MAX Episode에 도달하여 학습이 종료되었습니다. (학습실패)')
-        savepath = "./python/test_system/quadrotor/trained_net/A2C_quadrotor.pth"
         checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
                     'optimizer': glob_brain.optimizer.state_dict(),
                     'reward_history': reward_history
                 }
-        torch.save(checkpoint, savepath)
+        torch.save(checkpoint, ckp_path)
 
         return {
                 'obs': obs_replay_buffer,
