@@ -175,13 +175,14 @@ class Brain(object):
 
 class Environment:
     def load_ckp(self, checkpoint_fpath, model, optimizer):
+        '''load past model'''
         checkpoint = torch.load(checkpoint_fpath)
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-        return model, optimizer, checkpoint['episode']
+        return model, optimizer, checkpoint['episode'], checkpoint['reward_history']
 
-    def run(self, arrive_time: int, hover_time: int) -> None:
+    def run(self, hover_time: int) -> None:
         '''running entry point'''
         # print device
         print(device)
@@ -195,13 +196,14 @@ class Environment:
         n_out = envs[0].action_space_size               # action outpus
         n_mid = n_in * n_out                            # 972(12*81) mid junction
         episode = 0
+        reward_history = []
         actor_critic = Net(n_in, n_mid, n_out).to(device)          # Net init
         glob_brain = Brain(actor_critic)                           # Brain init
 
         # Load saved model to resume learning (comment out to start new training)
+        ckp_path = par.netpath
         if par.is_resume:
-            ckp_path = par.netpath
-            actor_critic, glob_brain.optimizer, episode = self.load_ckp(
+            actor_critic, glob_brain.optimizer, episode, reward_history = self.load_ckp(
                 ckp_path, actor_critic, glob_brain.optimizer)
 
         msg = 'Please change NUM_EPISODES to bigger than previous: %i' % episode
@@ -209,7 +211,7 @@ class Environment:
 
         # Initialization of variables
         p = par.p
-        travel_time = arrive_time + hover_time
+        travel_time = hover_time
         obs_shape = n_in
         current_obs = torch.zeros(NUM_PROCESSES, obs_shape).to(device)                         # (16,4) 의 tensor
         rollouts = RolloutStorage(NUM_ADVANCED_STEP, NUM_PROCESSES,obs_shape)       # RolloutStorage init
@@ -236,13 +238,13 @@ class Environment:
         vel_n_step = np.zeros([NUM_PROCESSES])
 
         # 초기 state...
-        obs = [envs[i].reset(p, arrive_time, hover_time) for i in range(NUM_PROCESSES)]
+        obs = [envs[i].reset(p, hover_time) for i in range(NUM_PROCESSES)]
         obs = np.array(obs)
         obs = torch.from_numpy(obs).float()                     # (32,12) 의 tensor
         current_obs = obs                                       # current obs 의 업데이트
 
         # Reference trajectory
-        ref_trajectory = par.ref_trajectory
+        # ref_trajectory = par.ref_trajectory
 
         # advanced 학습(action actor)에 사용되는 객체 rollouts 첫번째 상태에 현재 상태를 저장
         rollouts.observations[0].copy_(current_obs)
@@ -282,34 +284,29 @@ class Environment:
                     if done_np[i]:          # success or fail
                         mask_step = torch.FloatTensor([[1.0]])
                         print(f'{episode+1} episode, {i+1} slot: {(each_step[i] + 1)/(1/DELTA_T)} [s]')
-                        if done_info_np[i,0]:                               # done with arrival
+                        if done_info_np[i,0]:                               # done with hovering
                             masks_arrive_step= torch.FloatTensor([[1.0]])
-                            reward_np[i] = 10000.0
-                        elif done_info_np[i,1]:                             # done with turn
-                            reward_np[i] = 5000.0
-                        elif each_step[i] <= (1/DELTA_T)*0.15:              # not lifted up
-                            reward_np[i] = -100000
-                        elif np.linalg.norm(obs_np[i,9:12] - par.startpoint) <= 0.1:
-                            reward_np[i] = -10000000
+                            reward_np[i] = np.clip(1/distance_step[i],0,50)
                         else:
                             reward_replay_buffer[i, each_step[i]] = -10
-                            reward_np[i] = reward_replay_buffer[i,:each_step[i]+1].mean() * each_step[i] * DELTA_T
+                            reward_np[i] = -10
                             masks_arrive_step = torch.FloatTensor([[0.0]])
 
                         # reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
-                        reward_past_32 = np.hstack((reward_past_32[1:],
-                                                    reward_replay_buffer[i,:each_step[i]+1].mean()))
+                        reward_past_32 = np.hstack((reward_past_32[1:], reward_np[i]))
+                        reward_history.append(reward_np[i])
+
                         print(f'slot_reward:    {round(reward_np[i,0],4)}\n'
                               # f'slot_reward:    {round(reward_replay_buffer[i,:each_step[i]+1].mean(),4)}\n'
                               f'done_point:     {np.round(obs_np[i,9:12],3)} m\n'
-                              f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
+                            #   f'done_ref_point: {np.round(ref_trajectory[each_step[i],:],3)} m\n'
                               f'distance:       {round(distance_step[i],4)}m\n' 
                               f'reward_mean:    {round(reward_past_32.mean(),2)}\n'
                               f'reward_max:     {round(reward_past_32.max(),2)}'
                             #   f'reward_min: {round(reward_past_32.min(),2)}'
                               ) 
                         each_step[i] = 0                                        # step 초기화
-                        obs_np[i] = envs[i].reset(p, arrive_time, hover_time)   # 환경 초기화
+                        obs_np[i] = envs[i].reset(p, hover_time)   # 환경 초기화
                         reward_replay_buffer[i] = 0
                         obs_replay_buffer[i] = 0
                         distance_replay_buffer[i] = 0
@@ -318,34 +315,10 @@ class Environment:
                     else:                           # 비행중
                         mask_step = torch.FloatTensor([[0.0]])
                         masks_arrive_step = torch.FloatTensor([[0.0]])
-
-                        # original
-                        # reward_np[i] = 0
-                        
-                        # vel_vector diff acceleration model
-                        # vel_diff_current = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]] - 
-                        #                         vel_vect_replay_buffer[i,:,each_step[i]])
-                        # vel_diff_past = np.linalg.norm(distance_vect_replay_buffer[i,:,each_step[i]-1] - 
-                        #                         vel_vect_replay_buffer[i,:,each_step[i]-1])
-                        # vel_diff_dot = (vel_diff_current - vel_diff_past) / DELTA_T
-                        # reward_np[i] = -vel_diff_dot
-
-                        # vel_diff minimize model
-                        # reward_np[i] = 10 - np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])
-                        # reward_np[i] = np.clip(1/(np.linalg.norm(distance_vect_np[i] - vel_vect_np[i])),0,1000)
-
-                        # vel_diff dot product model
-                        # vel_n_hat = vel_vect_np[i] / vel_n_step[i]
-                        # distance_hat = distance_vect_np[i] / distance_step[i]
-                        # reward_np[i] = np.dot(distance_hat, vel_n_hat) *\
-                        #      np.clip(abs(1/((distance_step[i] / vel_n_step[i])-1)),0,10000)      # |1/(x-1)| -> argmax=1, saturate over than 100
-
-                        # distance model
-                        # reward_np[i] = -distance_step[i]
-                        reward_np[i] = np.clip(1/distance_step[i],0,10000)
-
-                        reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                     
                         reward_np[i] = 0
+                        reward_replay_buffer[i, int(each_step[i])] = reward_np[i]
+                        
                         each_step[i] += 1           # 그대로 진행
 
                     masks = torch.cat((masks, mask_step), dim=0)   
@@ -392,20 +365,21 @@ class Environment:
             # 모든 환경이 성공(도착)
             if torch.sum(masks_arrive) == NUM_PROCESSES:
                 print('모든 환경 성공')
-                savepath = par.netpath
                 checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
-                    'optimizer': glob_brain.optimizer.state_dict()
+                    'optimizer': glob_brain.optimizer.state_dict(),
+                    'reward_history': reward_history
                 }
-                torch.save(checkpoint, savepath)
+                torch.save(checkpoint, ckp_path)
 
                 return {
                     'obs': obs_replay_buffer,
                     'dist': distance_replay_buffer,
                     'input': input_replay_buffer,
                     'step': each_step,
-                    'reward': reward_replay_buffer
+                    'reward': reward_replay_buffer,
+                    'reward_history': reward_history
                 }
             
             episode += 1
@@ -415,7 +389,8 @@ class Environment:
         checkpoint = {
                     'episode': episode,
                     'state_dict': actor_critic.state_dict(),
-                    'optimizer': glob_brain.optimizer.state_dict()
+                    'optimizer': glob_brain.optimizer.state_dict(),
+                    'reward_history': reward_history
                 }
         torch.save(checkpoint, savepath)
 
@@ -424,5 +399,6 @@ class Environment:
                 'dist': distance_replay_buffer,
                 'input': input_replay_buffer,
                 'step': each_step,
-                'reward': reward_replay_buffer
+                'reward': reward_replay_buffer,
+                'reward_history': reward_history
             }

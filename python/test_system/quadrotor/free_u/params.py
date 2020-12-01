@@ -24,10 +24,16 @@ arm_angles_deg = [45, -135, -45, 135]
 arm_angles_rad = [(np.pi / 180) * i for i in arm_angles_deg]
 motor_dirs = [1, 1, -1, -1] 
 
+'''Random inputs'''
+max_start_angle_deg = 30
+max_rand_force = 1           # [N]
+max_rand_moment = 1          # [N*m]
+
+
 '''Learning Variables'''
 GAMMA = 0.999                # 시간할인율
-NUM_EPISODES = 110000         # 최대 에피소드 수
-is_resume = True
+NUM_EPISODES = 1000         # 최대 에피소드 수
+is_resume = False
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
 NUM_ADVANCED_STEP = 20      # 총 보상을 계산할 때 Advantage 학습(action actor)을 할 단계 수
@@ -39,14 +45,16 @@ DELTA_T = 0.01
 learning_rate = 0.001
 
 ''' Trajectory '''
-startpoint = np.array([0,0,5])
-endpoint = np.array([5,5,30])
-arrive_time = 30
-hover_time = 2
-time = np.arange(0, arrive_time + hover_time, DELTA_T)
-ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
-for _ in range(int(hover_time * (1/DELTA_T))):
-    ref_trajectory = np.vstack((ref_trajectory, endpoint))
+# startpoint = np.array([0,0,5])
+# endpoint = np.array([5,5,30])
+# arrive_time = 30
+hover_time = 15
+ref_point = np.array([0,0,5])
+ref_angle = np.array([0,0,0])
+time = np.arange(0, hover_time, DELTA_T)
+# ref_trajectory = np.linspace(startpoint, endpoint, int(arrive_time*(1/DELTA_T)))
+# for _ in range(int(hover_time * (1/DELTA_T))):
+#     ref_trajectory = np.vstack((ref_trajectory, endpoint))
 
 '''Action control'''
 off_dist = 1    # [m]

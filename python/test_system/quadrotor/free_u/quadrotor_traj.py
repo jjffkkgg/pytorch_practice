@@ -70,9 +70,13 @@ class QuadRotorEnv:
             lim[0],lim[1],lim[2]                    # [m]
             ]
 
+        # Random noise/force/initial state
+        start_angle_deg = np.random.rand(3)* par.max_start_angle_deg
+        self.start_angle_rad = start_angle_deg*(np.pi/180)
+
+
         # start - end
-        self.endpoint = par.endpoint   # [m]
-        
+        # self.endpoint = par.endpoint   # [m]
         self.observation_space_size = 12                      # size of state space
         self.action_space_size = len(self.action_dic)         # size of action space
 
@@ -152,8 +156,8 @@ class QuadRotorEnv:
         # init vars
         reward = 0.0
         done = False
-        arrive = False
-        arrive_turn = False
+        hover = False
+        hover_turn = False
         self.u += self.action_dic[action]
 
         # calculate next step state
@@ -173,9 +177,13 @@ class QuadRotorEnv:
         self.t += dt
 
         # calculate distance to endpoint
-        distance_vect = self.trajectory[step + 1] - self.xi[9:12]
+        distance_vect = par.ref_point - self.xi[9:12]
         distance = np.linalg.norm(distance_vect)
-        euler = self.xi[6:9]
+
+        omega_b = self.xi[0:3]                      # Angular velocity (body)
+        vel_b = self.xi[3:6]                        # Velocity (body)
+        euler = self.xi[6:9]                        # Orientation (inertial) = r_nb
+        pos_n = self.xi[9:12]                       # Position (inertial)
         C_nb = comp.euler_to_dcm(euler)
         vel_n = ca.mtimes(C_nb, self.xi[3:6])
         # vel_n_size = np.linalg.norm(vel_n)
@@ -189,10 +197,10 @@ class QuadRotorEnv:
             print('------crashed to ground------')
         
         # done by off trajectory
-        off_dist = par.off_dist
-        if distance >= off_dist:
-            print(f'------{off_dist}m apart from trajectory------')
-            done = True
+        # off_dist = par.off_dist
+        # if distance >= off_dist:
+        #     print(f'------{off_dist}m apart from trajectory------')
+        #     done = True
             
         # done by obstacle crash
         # if self.test_space.is_collide(self.xi[9:12], self.radius):
@@ -206,21 +214,12 @@ class QuadRotorEnv:
                 done = True
                 print('------over the limit------')
         
-        # arrival cases
-        if step >= (self.time + self.arr_hover_t)*(1/dt) - 5:
-            if distance <= 0.1:
-                if np.linalg.norm(self.xi[3:6]) <= 0.05:
-                    if np.linalg.norm(self.xi[0:3]) <= ca.pi/18:        # arrive with stop(hover)
-                        print('------arrived!------')
-                        arrive = True
-                        done = True
-                    else:
-                        print('------hover with turning------')
-                        arrive_turn = True
-                        done = True
-                else:
-                    print('------arrive but not hover------')
-                    done = True
+        # success cases
+        if step >= (self.time)*(1/dt) - 10:
+            if np.linalg.norm(vel_b) <= 0.1:
+                print('------hovering------')
+                done = True
+                hover = True
             else:
                 print('------Overtime!------')
                 done = True
@@ -240,21 +239,21 @@ class QuadRotorEnv:
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.xi, self.u, reward, done, np.array([arrive, arrive_turn]), distance_vect, vel_n.T
+        return self.xi, self.u, reward, done, np.array([hover, hover_turn]), distance_vect, vel_n.T
 
-    def reset(self, p, arrive_time: int, hover_time: int):
+    def reset(self, p, hover_time: int):
         '''reset the environment. (init state)'''
         self.xi = [0] * 12
-        self.xi[9:12] = par.startpoint
+        self.xi[6:9] = self.start_angle_rad
+        self.xi[9:12] = par.ref_point
         self.steps_beyond_done = None
         self.p = p
         self.hover_thrust = comp.throttle(p[0]*p[8],p[3],p[2],p[4],p[5],p[6],p[7])
         self.u = np.array([0.0,0.0,0.0,self.hover_thrust * 4])
         self.t = 0
         # self.radius = 2 * self.p[1]
-        self.time = arrive_time
-        self.arr_hover_t = hover_time
-        self.trajectory = par.ref_trajectory
+        self.time = hover_time
+        # self.trajectory = par.ref_trajectory
 
         return self.xi
         
