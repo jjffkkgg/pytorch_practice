@@ -1,6 +1,6 @@
 #%% In[1]
 
-import quadrotor_A2C_traj as train_model
+import quadrotor_A2C as train_model
 import numpy as np
 import params as par
 import json
