@@ -32,7 +32,7 @@ max_rand_moment = 0.01          # [N*m]
 
 '''Learning Variables'''
 GAMMA = 0.9999                # 시간할인율
-NUM_EPISODES = 5000         # 최대 에피소드 수
+NUM_EPISODES = 105000         # 최대 에피소드 수
 is_resume = True
 
 NUM_PROCESSES = 32          # 동시 실행 환경 수
@@ -42,7 +42,7 @@ VALUE_LOSS_COEFF = 0.5
 ENTROPY_COEFF = 0.1         # Local min 에서 벗어나기 위한 엔트로피 상수
 MAX_GRAD_NORM = 0.5
 DELTA_T = 0.01
-learning_rate = 0.01
+learning_rate = 0.001
 
 ''' Attitude '''
 # startpoint = np.array([0,0,5])
